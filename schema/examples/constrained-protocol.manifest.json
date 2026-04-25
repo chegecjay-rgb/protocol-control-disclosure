@@ -1,0 +1,259 @@
+{
+  "protocolName": "Constrained Multisig Example",
+  "standardVersion": 1,
+  "chainId": 1,
+  "module": "0x0000000000000000000000000000000000000A11",
+  "manifestHashStrategy": "keccak256-canonical-json-v1",
+  "manifestHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+  "manifestURI": "ipfs://constrained-manifest",
+  "metadataURI": "ipfs://constrained-metadata",
+  "manifestClosureClaimed": true,
+  "supportedInterfaces": {
+    "core": true,
+    "summary": true,
+    "auditEvidence": true,
+    "aggregate": true
+  },
+  "disclosureScope": {
+    "scopeHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "coveredComponentsHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "coveredAssetsHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "excludedDependenciesHash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "assumptionsHash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "scopeURI": "ipfs://scope",
+    "coverageURI": "ipfs://coverage",
+    "exclusionsURI": "ipfs://exclusions",
+    "assumptionsURI": "ipfs://assumptions",
+    "includesAllPrivilegeRelevantComponents": true,
+    "includesAllUserFacingAssets": true
+  },
+  "components": [
+    {
+      "address": "0x0000000000000000000000000000000000000100",
+      "nodeId": "0x0000000000000000000000000000000000000000000000000000000000000100",
+      "nodeType": "PROXY",
+      "inManifest": true,
+      "critical": true,
+      "custodyCritical": true,
+      "exactVerified": true,
+      "upgradeable": true,
+      "implementation": "0x0000000000000000000000000000000000000101",
+      "adminNodeId": "0x0000000000000000000000000000000000000000000000000000000000000200",
+      "proofLevel": "EXACT_VERIFIED",
+      "metadataHash": "0x1212121212121212121212121212121212121212121212121212121212121212"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000000101",
+      "nodeId": "0x0000000000000000000000000000000000000000000000000000000000000101",
+      "nodeType": "IMPLEMENTATION",
+      "inManifest": true,
+      "critical": true,
+      "custodyCritical": false,
+      "exactVerified": true,
+      "upgradeable": false,
+      "implementation": "0x0000000000000000000000000000000000000000",
+      "adminNodeId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "proofLevel": "EXACT_VERIFIED",
+      "metadataHash": "0x1313131313131313131313131313131313131313131313131313131313131313"
+    }
+  ],
+  "nodes": [
+    {
+      "nodeId": "0x0000000000000000000000000000000000000000000000000000000000000200",
+      "nodeAddress": "0x0000000000000000000000000000000000000200",
+      "nodeType": "TIMELOCK",
+      "inManifest": true,
+      "critical": false,
+      "authority": true,
+      "proofLevel": "ONCHAIN_DERIVED",
+      "metadataHash": "0x1414141414141414141414141414141414141414141414141414141414141414"
+    },
+    {
+      "nodeId": "0x0000000000000000000000000000000000000000000000000000000000000201",
+      "nodeAddress": "0x0000000000000000000000000000000000000201",
+      "nodeType": "MULTISIG",
+      "inManifest": true,
+      "critical": false,
+      "authority": true,
+      "proofLevel": "ONCHAIN_DERIVED",
+      "metadataHash": "0x1515151515151515151515151515151515151515151515151515151515151515"
+    }
+  ],
+  "powers": [
+    {
+      "powerId": "0x1616161616161616161616161616161616161616161616161616161616161616",
+      "powerKind": "UPGRADE",
+      "enabled": true,
+      "target": "0x0000000000000000000000000000000000000100",
+      "targetNodeId": "0x0000000000000000000000000000000000000000000000000000000000000100",
+      "controllerType": "MULTISIG",
+      "controllerNodeId": "0x0000000000000000000000000000000000000000000000000000000000000201",
+      "threshold": 3,
+      "controllerCount": 5,
+      "executionDelaySeconds": 259200,
+      "emergencyBypass": false,
+      "scope": "CONTRACT",
+      "impactLevel": "CRITICAL",
+      "maxImpactValue": 0,
+      "canTouchUserFunds": false,
+      "rateLimit": 0,
+      "rateLimitWindowSeconds": 0,
+      "revocable": true,
+      "proofLevel": "ONCHAIN_DERIVED",
+      "scopeHash": "0x1717171717171717171717171717171717171717171717171717171717171717",
+      "notesHash": "0x1818181818181818181818181818181818181818181818181818181818181818"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "0x1919191919191919191919191919191919191919191919191919191919191919",
+      "edgeKind": "CONTROLS",
+      "powerKind": "UPGRADE",
+      "fromNodeId": "0x0000000000000000000000000000000000000000000000000000000000000201",
+      "toNodeId": "0x0000000000000000000000000000000000000000000000000000000000000200",
+      "direct": true,
+      "transitive": false,
+      "canBypassDelay": false,
+      "touchesUserFunds": false,
+      "proofLevel": "ONCHAIN_DERIVED",
+      "notesHash": "0x1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a"
+    }
+  ],
+  "findings": [],
+  "verificationReferences": [
+    {
+      "subjectId": "0x0000000000000000000000000000000000000000000000000000000000000100",
+      "subjectAddress": "0x0000000000000000000000000000000000000100",
+      "exactVerified": true,
+      "sourceURI": "ipfs://source",
+      "buildInfoURI": "ipfs://build",
+      "metadataURI": "ipfs://metadata"
+    }
+  ],
+  "summaryExtension": {
+    "disclosureSummary": {
+      "interfaceSupported": true,
+      "manifestClaimedClosed": true,
+      "manifestClosed": true,
+      "allNodesInManifest": true,
+      "allPowersHaveKnownControllers": true,
+      "allEdgesKnown": true,
+      "exactVerifiedCriticalComponents": true,
+      "componentCount": 2,
+      "nodeCount": 2,
+      "edgeCount": 1,
+      "powerCount": 1,
+      "unknownPrivilegeCount": 0
+    },
+    "constraintSummary": {
+      "noSingleKeyCriticalControl": true,
+      "noZeroDelayCustodyUpgrade": true,
+      "noUndisclosedDelegatecall": true,
+      "noUndisclosedCustodian": true,
+      "noUndisclosedBridgeAdapter": true,
+      "criticalPowersDelayed": true,
+      "userFundsIsolated": true,
+      "criticalPowerCount": 1,
+      "delayedCriticalPowerCount": 1
+    },
+    "reviewRequirementSummary": {
+      "privilegeGraphReviewRequired": true,
+      "proxyUpgradeReviewRequired": true,
+      "adminRoleReviewRequired": false,
+      "moduleReviewRequired": false,
+      "controlPathReviewRequired": true
+    },
+    "proofLevelDistribution": {
+      "selfDeclared": 0,
+      "onchainDerived": 4,
+      "exactVerified": 4,
+      "formallyProven": 0
+    }
+  },
+  "auditEvidenceExtension": {
+    "audits": [
+      {
+        "auditId": "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+        "auditorName": "Independent Auditor",
+        "reportURI": "ipfs://audit-report",
+        "reportHash": "0x1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c",
+        "reportMetadataHash": "0x1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d",
+        "coveredManifestHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "coveredBuildHash": "0x1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+        "coveredCommitHash": "0x1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f",
+        "coveredDeploymentHash": "0x2020202020202020202020202020202020202020202020202020202020202020",
+        "issuedAt": 1700000000,
+        "scope": "FULL",
+        "publicReport": true,
+        "coversPrivilegeGraph": true,
+        "coversProxyUpgradePaths": true,
+        "coversAdminRoles": true,
+        "coversModules": true,
+        "coversControlPaths": true,
+        "coversOracleConfig": true,
+        "coversRuntimeConfig": true,
+        "proofLevel": "EXACT_VERIFIED",
+        "notesHash": "0x2121212121212121212121212121212121212121212121212121212121212121"
+      }
+    ],
+    "auditApplicability": [
+      {
+        "auditId": "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+        "status": "MATCHES_LIVE_DEPLOYMENT",
+        "liveMatchesManifest": true,
+        "liveMatchesBuild": true,
+        "liveMatchesDeployment": true,
+        "liveMatchesRuntimeConfig": true,
+        "liveMatchesRoleConfig": true,
+        "liveMatchesModules": true,
+        "liveMatchesProxyTopology": true,
+        "liveMatchesOracleConfig": true,
+        "liveMatchesControllers": true,
+        "stale": false,
+        "proofLevel": "ONCHAIN_DERIVED",
+        "notesHash": "0x2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ],
+    "auditFindings": [
+      {
+        "findingId": "0x2323232323232323232323232323232323232323232323232323232323232323",
+        "auditId": "0x1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b",
+        "impactLevel": "LOW",
+        "status": "RESOLVED",
+        "privilegeRelated": true,
+        "affectsUserFunds": false,
+        "subjectId": "0x0000000000000000000000000000000000000000000000000000000000000100",
+        "powerId": "0x1616161616161616161616161616161616161616161616161616161616161616",
+        "proofLevel": "EXACT_VERIFIED",
+        "titleHash": "0x2424242424242424242424242424242424242424242424242424242424242424",
+        "notesHash": "0x2525252525252525252525252525252525252525252525252525252525252525"
+      }
+    ],
+    "auditIssues": [],
+    "auditEvidenceSummary": {
+      "auditEvidencePresent": true,
+      "currentAuditApplies": true,
+      "currentAuditExactMatch": true,
+      "fullScopeAuditPresent": true,
+      "privilegeGraphCoveragePresent": true,
+      "proxyUpgradeCoveragePresent": true,
+      "adminRoleCoveragePresent": true,
+      "moduleCoveragePresent": true,
+      "controlPathCoveragePresent": true,
+      "staleOrDriftedAuditPresent": false,
+      "unresolvedFindingsPresent": false,
+      "disputedFindingsPresent": false,
+      "acknowledgedFindingsPresent": false,
+      "userInterpretationRisk": false,
+      "auditCount": 1,
+      "applicableAuditCount": 1,
+      "partialScopeAuditCount": 0,
+      "unknownApplicabilityCount": 0,
+      "driftedAuditCount": 0,
+      "unresolvedFindingCount": 0,
+      "disputedFindingCount": 0,
+      "acknowledgedFindingCount": 0,
+      "staleAuditCount": 0
+    }
+  }
+}

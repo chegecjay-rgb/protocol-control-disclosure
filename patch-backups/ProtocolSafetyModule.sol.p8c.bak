@@ -1,0 +1,2058 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {IProtocolSafety} from "src/interfaces/IProtocolSafety.sol";
+import {IProtocolSafetyAuditEvidence} from "src/interfaces/IProtocolSafetyAuditEvidence.sol";
+import {IProtocolSafetyCapabilities} from "src/interfaces/IProtocolSafetyCapabilities.sol";
+import {IProtocolSafetyClaims} from "src/interfaces/IProtocolSafetyClaims.sol";
+import {IProtocolSafetyCore} from "src/interfaces/IProtocolSafetyCore.sol";
+import {IProtocolSafetySummary} from "src/interfaces/IProtocolSafetySummary.sol";
+import {IProtocolSafetyProfiles} from "src/interfaces/IProtocolSafetyProfiles.sol";
+import {SafetyCapabilities} from "src/libraries/SafetyCapabilities.sol";
+import {SafetyClaimsTypes} from "src/libraries/SafetyClaimsTypes.sol";
+import {SafetyProfileTypes} from "src/libraries/SafetyProfileTypes.sol";
+import {SafetyTypes} from "src/libraries/SafetyTypes.sol";
+
+/// @title ProtocolSafetyModule
+/// @notice Self-declared protocol metadata surface for disclosure graphs, summaries, and audit evidence.
+/// @dev The module exposes raw facts in the core interface and derived views in optional extensions.
+contract ProtocolSafetyModule is
+    Ownable,
+    ERC165,
+    IProtocolSafety,
+    IProtocolSafetyCapabilities,
+    IProtocolSafetyClaims,
+    IProtocolSafetyProfiles
+{
+    error ZeroAddress();
+    error ZeroNodeId();
+    error EmptyProtocolName();
+    error UnknownComponent(address component);
+    error UnknownNode(bytes32 nodeId);
+    error UnknownNodeAddress(address nodeAddress);
+    error UnknownPower(bytes32 powerId);
+    error UnknownEdge(bytes32 edgeId);
+    error UnknownAudit(bytes32 auditId);
+    error UnknownAuditContext(bytes32 auditId);
+    error UnknownAuditFinding(bytes32 findingId);
+    error IndexOutOfBounds(uint256 index, uint256 length);
+    error ImmutablePowerTarget(bytes32 powerId, address currentTarget, address newTarget);
+    error ImmutableEdgeEndpoints(
+        bytes32 edgeId,
+        bytes32 currentFromNodeId,
+        bytes32 currentToNodeId,
+        bytes32 newFromNodeId,
+        bytes32 newToNodeId
+    );
+    error ImmutableAuditAssociation(bytes32 findingId, bytes32 currentAuditId, bytes32 newAuditId);
+    error InvalidThreshold(uint16 threshold, uint16 controllerCount);
+    error DisabledPowerCannotDeclareController();
+    error InvalidPowerId();
+    error InvalidEdgeId();
+    error InvalidAuditId();
+    error InvalidAuditFindingId();
+    error InvalidComponentNodeId(address component, bytes32 expectedNodeId, bytes32 providedNodeId);
+    error InvalidTargetNodeId(bytes32 powerId, bytes32 expectedNodeId, bytes32 providedNodeId);
+    error NodeAddressAlreadyBound(address nodeAddress, bytes32 currentNodeId, bytes32 newNodeId);
+
+    SafetyTypes.ProtocolMetadata private _protocolMetadata;
+    SafetyTypes.DisclosureScope private _disclosureScope;
+    SafetyTypes.DisclosureSummary private _disclosureSummary;
+    SafetyTypes.ConstraintSummary private _constraintSummary;
+    SafetyTypes.ReviewCueSummary private _reviewCueSummary;
+    SafetyTypes.EvidenceStrengthDistribution private _evidenceStrengthDistribution;
+    SafetyTypes.AuditEvidenceSummary private _auditEvidenceSummary;
+
+    uint256 private _disclosureNonce;
+    uint256 private _auditEvidenceNonce;
+    uint256 private _claimsNonce;
+    uint256 private _profilesNonce;
+
+    bytes32[] private _claimIdList;
+    bytes32[] private _assumptionIdList;
+    bytes32[] private _claimEvidenceLinkIdList;
+
+    mapping(bytes32 => SafetyClaimsTypes.ClaimRecord) private _claimRecords;
+    mapping(bytes32 => bool) private _claimExists;
+    mapping(bytes32 => bytes32[]) private _claimAssumptionIds;
+    mapping(bytes32 => bytes32[]) private _claimEvidenceLinkIds;
+
+    mapping(bytes32 => SafetyClaimsTypes.AssumptionRecord) private _assumptionRecords;
+    mapping(bytes32 => bool) private _assumptionExists;
+
+    mapping(bytes32 => SafetyClaimsTypes.ClaimEvidenceLink) private _claimEvidenceLinks;
+    mapping(bytes32 => bool) private _claimEvidenceLinkExists;
+
+    SafetyProfileTypes.DisclosureProfile private _disclosureProfile;
+    mapping(address => SafetyProfileTypes.ComponentProfile) private _componentProfiles;
+    mapping(bytes32 => SafetyProfileTypes.NodeProfile) private _nodeProfiles;
+    mapping(bytes32 => SafetyProfileTypes.PowerProfile) private _powerProfiles;
+    mapping(bytes32 => SafetyProfileTypes.EdgeProfile) private _edgeProfiles;
+
+    address[] private _componentList;
+    bytes32[] private _nodeIds;
+    bytes32[] private _powerIds;
+    bytes32[] private _edgeIds;
+    bytes32[] private _auditIds;
+    bytes32[] private _auditFindingIds;
+    SafetyTypes.DiagnosticFinding[] private _findings;
+    SafetyTypes.AuditIssue[] private _auditIssues;
+
+    mapping(address => SafetyTypes.Component) private _componentInfo;
+    mapping(address => bool) private _componentRegistered;
+    mapping(bytes32 => SafetyTypes.GraphNode) private _nodeInfo;
+    mapping(bytes32 => bool) private _nodeRegistered;
+    mapping(address => bytes32) private _nodeIdByAddress;
+    mapping(bytes32 => SafetyTypes.PowerDescriptor) private _powerInfo;
+    mapping(bytes32 => bool) private _powerRegistered;
+    mapping(address => bytes32[]) private _powerIdsByTarget;
+    mapping(bytes32 => SafetyTypes.GraphEdge) private _edgeInfo;
+    mapping(bytes32 => bool) private _edgeRegistered;
+    mapping(bytes32 => bytes32[]) private _outgoingEdgeIds;
+    mapping(bytes32 => SafetyTypes.AuditRecord) private _auditInfo;
+    mapping(bytes32 => bool) private _auditRegistered;
+    mapping(bytes32 => SafetyTypes.AuditContext) private _auditContextInfo;
+    mapping(bytes32 => bool) private _auditContextRegistered;
+    mapping(bytes32 => SafetyTypes.AuditFindingRecord) private _auditFindingInfo;
+    mapping(bytes32 => bool) private _auditFindingRegistered;
+    mapping(uint8 => uint256) private _findingCountByKind;
+    mapping(uint8 => uint256) private _auditIssueCountByKind;
+    mapping(uint8 => uint256) private _auditFindingCountByStatus;
+
+    constructor(
+        address initialOwner,
+        string memory protocolName_,
+        uint64 standardVersion_,
+        bytes32 manifestHash_,
+        string memory manifestUri_,
+        string memory metadataUri_,
+        bool publisherAssertedManifestClosure_
+    ) Ownable(initialOwner) {
+        if (initialOwner == address(0)) revert ZeroAddress();
+        if (bytes(protocolName_).length == 0) revert EmptyProtocolName();
+
+        _protocolMetadata = SafetyTypes.ProtocolMetadata({
+            protocolName: protocolName_,
+            standardVersion: standardVersion_,
+            chainId: block.chainid,
+            manifestHash: manifestHash_,
+            manifestURI: manifestUri_,
+            metadataURI: metadataUri_,
+            publisherAssertedManifestClosure: publisherAssertedManifestClosure_
+        });
+
+        emit ProtocolMetadataUpdated(
+            protocolName_,
+            standardVersion_,
+            block.chainid,
+            manifestHash_,
+            manifestUri_,
+            metadataUri_,
+            publisherAssertedManifestClosure_
+        );
+        _bumpDisclosureNonce();
+
+        _recomputeDerivedState();
+    }
+
+    function protocolMetadata() external view returns (SafetyTypes.ProtocolMetadata memory) {
+        return _protocolMetadata;
+    }
+
+    function disclosureScope() external view returns (SafetyTypes.DisclosureScope memory) {
+        return _disclosureScope;
+    }
+
+    function disclosureNonce() external view returns (uint256) {
+        return _disclosureNonce;
+    }
+
+    function capabilityFlags() external pure returns (uint256) {
+        return SafetyCapabilities.protocolSafetyCapabilityFlags();
+    }
+
+    function supportsCapabilities(uint256 capabilityMask) external pure returns (bool) {
+        return SafetyCapabilities.hasCapabilities(
+            SafetyCapabilities.protocolSafetyCapabilityFlags(), capabilityMask
+        );
+    }
+
+    function claimsNonce() external view returns (uint256) {
+        return _claimsNonce;
+    }
+
+    function profilesNonce() external view returns (uint256) {
+        return _profilesNonce;
+    }
+
+    function disclosureProfile() external view returns (SafetyProfileTypes.DisclosureProfile memory) {
+        return _disclosureProfile;
+    }
+
+    function componentProfile(address component)
+        external
+        view
+        returns (SafetyProfileTypes.ComponentProfile memory)
+    {
+        if (!_componentRegistered[component]) revert UnknownComponent(component);
+        return _componentProfiles[component];
+    }
+
+    function nodeProfile(bytes32 nodeId) external view returns (SafetyProfileTypes.NodeProfile memory) {
+        if (!_nodeRegistered[nodeId]) revert UnknownNode(nodeId);
+        return _nodeProfiles[nodeId];
+    }
+
+    function powerProfile(bytes32 powerId) external view returns (SafetyProfileTypes.PowerProfile memory) {
+        if (!_powerRegistered[powerId]) revert UnknownPower(powerId);
+        return _powerProfiles[powerId];
+    }
+
+    function edgeProfile(bytes32 edgeId) external view returns (SafetyProfileTypes.EdgeProfile memory) {
+        if (!_edgeRegistered[edgeId]) revert UnknownEdge(edgeId);
+        return _edgeProfiles[edgeId];
+    }
+
+    function claimCount() external view returns (uint256) {
+        return _claimIdList.length;
+    }
+
+    function claimIdAt(uint256 index) external view returns (bytes32) {
+        return _claimIdList[index];
+    }
+
+    function claimRecord(bytes32 claimId) external view returns (SafetyClaimsTypes.ClaimRecord memory) {
+        require(_claimExists[claimId], "undeclared claim");
+        return _claimRecords[claimId];
+    }
+
+    function assumptionCount() external view returns (uint256) {
+        return _assumptionIdList.length;
+    }
+
+    function assumptionIdAt(uint256 index) external view returns (bytes32) {
+        return _assumptionIdList[index];
+    }
+
+    function assumptionRecord(bytes32 assumptionId)
+        external
+        view
+        returns (SafetyClaimsTypes.AssumptionRecord memory)
+    {
+        require(_assumptionExists[assumptionId], "undeclared assumption");
+        return _assumptionRecords[assumptionId];
+    }
+
+    function claimAssumptionCount(bytes32 claimId) external view returns (uint256) {
+        require(_claimExists[claimId], "undeclared claim");
+        return _claimAssumptionIds[claimId].length;
+    }
+
+    function claimAssumptionIdAt(bytes32 claimId, uint256 index) external view returns (bytes32) {
+        require(_claimExists[claimId], "undeclared claim");
+        return _claimAssumptionIds[claimId][index];
+    }
+
+    function claimEvidenceLinkCount() external view returns (uint256) {
+        return _claimEvidenceLinkIdList.length;
+    }
+
+    function claimEvidenceLinkIdAt(uint256 index) external view returns (bytes32) {
+        return _claimEvidenceLinkIdList[index];
+    }
+
+    function claimEvidenceLink(bytes32 linkId)
+        external
+        view
+        returns (SafetyClaimsTypes.ClaimEvidenceLink memory)
+    {
+        require(_claimEvidenceLinkExists[linkId], "undeclared claim evidence link");
+        return _claimEvidenceLinks[linkId];
+    }
+
+    function claimEvidenceLinkCountForClaim(bytes32 claimId) external view returns (uint256) {
+        require(_claimExists[claimId], "undeclared claim");
+        return _claimEvidenceLinkIds[claimId].length;
+    }
+
+    function claimEvidenceLinkIdAtForClaim(bytes32 claimId, uint256 index) external view returns (bytes32) {
+        require(_claimExists[claimId], "undeclared claim");
+        return _claimEvidenceLinkIds[claimId][index];
+    }
+
+    function componentCount() external view returns (uint256) {
+        return _componentList.length;
+    }
+
+    function componentAt(uint256 index) external view returns (SafetyTypes.Component memory) {
+        if (index >= _componentList.length) revert IndexOutOfBounds(index, _componentList.length);
+        return _componentInfo[_componentList[index]];
+    }
+
+    function componentInfo(address component) external view returns (SafetyTypes.Component memory) {
+        if (!_componentRegistered[component]) revert UnknownComponent(component);
+        return _componentInfo[component];
+    }
+
+    function isRegisteredComponent(address component) external view returns (bool) {
+        return _componentRegistered[component];
+    }
+
+    function nodeCount() external view returns (uint256) {
+        return _nodeIds.length;
+    }
+
+    function nodeAt(uint256 index) external view returns (SafetyTypes.GraphNode memory) {
+        if (index >= _nodeIds.length) revert IndexOutOfBounds(index, _nodeIds.length);
+        return _nodeInfo[_nodeIds[index]];
+    }
+
+    function nodeInfo(bytes32 nodeId) public view returns (SafetyTypes.GraphNode memory) {
+        if (!_nodeRegistered[nodeId]) revert UnknownNode(nodeId);
+        return _nodeInfo[nodeId];
+    }
+
+    function nodeInfo(address nodeAddress) external view returns (SafetyTypes.GraphNode memory) {
+        bytes32 nodeId = _nodeIdByAddress[nodeAddress];
+        if (nodeId == bytes32(0)) revert UnknownNodeAddress(nodeAddress);
+        return nodeInfo(nodeId);
+    }
+
+    function isRegisteredNode(bytes32 nodeId) public view returns (bool) {
+        return _nodeRegistered[nodeId];
+    }
+
+    function isRegisteredNode(address nodeAddress) external view returns (bool) {
+        return _nodeIdByAddress[nodeAddress] != bytes32(0);
+    }
+
+    function nodeIdOfAddress(address nodeAddress) public view returns (bytes32) {
+        return _nodeIdByAddress[nodeAddress];
+    }
+
+    function hasNodeAddress(address nodeAddress) external view returns (bool) {
+        return _nodeIdByAddress[nodeAddress] != bytes32(0);
+    }
+
+    function powerCount() external view returns (uint256) {
+        return _powerIds.length;
+    }
+
+    function powerAt(uint256 index) external view returns (SafetyTypes.PowerDescriptor memory) {
+        if (index >= _powerIds.length) revert IndexOutOfBounds(index, _powerIds.length);
+        return _powerInfo[_powerIds[index]];
+    }
+
+    function powerInfo(bytes32 powerId) public view returns (SafetyTypes.PowerDescriptor memory) {
+        if (!_powerRegistered[powerId]) revert UnknownPower(powerId);
+        return _powerInfo[powerId];
+    }
+
+    function powerCountForTarget(address target) external view returns (uint256) {
+        return _powerIdsByTarget[target].length;
+    }
+
+    function powerIdForTargetAt(address target, uint256 index) external view returns (bytes32) {
+        if (index >= _powerIdsByTarget[target].length) {
+            revert IndexOutOfBounds(index, _powerIdsByTarget[target].length);
+        }
+        return _powerIdsByTarget[target][index];
+    }
+
+    function edgeCount() external view returns (uint256) {
+        return _edgeIds.length;
+    }
+
+    function edgeAt(uint256 index) external view returns (SafetyTypes.GraphEdge memory) {
+        if (index >= _edgeIds.length) revert IndexOutOfBounds(index, _edgeIds.length);
+        return _edgeInfo[_edgeIds[index]];
+    }
+
+    function edgeInfo(bytes32 edgeId) public view returns (SafetyTypes.GraphEdge memory) {
+        if (!_edgeRegistered[edgeId]) revert UnknownEdge(edgeId);
+        return _edgeInfo[edgeId];
+    }
+
+    function findingCount() external view returns (uint256) {
+        return _findings.length;
+    }
+
+    function findingAt(uint256 index) external view returns (SafetyTypes.DiagnosticFinding memory) {
+        if (index >= _findings.length) revert IndexOutOfBounds(index, _findings.length);
+        return _findings[index];
+    }
+
+    function disclosureSummary() external view returns (SafetyTypes.DisclosureSummary memory) {
+        return _disclosureSummary;
+    }
+
+    function constraintSummary() external view returns (SafetyTypes.ConstraintSummary memory) {
+        return _constraintSummary;
+    }
+
+    function reviewCueSummary() external view returns (SafetyTypes.ReviewCueSummary memory) {
+        return _reviewCueSummary;
+    }
+
+    function evidenceStrengthDistribution() external view returns (SafetyTypes.EvidenceStrengthDistribution memory) {
+        return _evidenceStrengthDistribution;
+    }
+
+    function findingCountByKind(SafetyTypes.DiagnosticKind kind) external view returns (uint256) {
+        return _findingCountByKind[uint8(kind)];
+    }
+
+    function hasFinding(SafetyTypes.DiagnosticKind kind) external view returns (bool) {
+        return _findingCountByKind[uint8(kind)] != 0;
+    }
+
+    function isPowerSensitive(bytes32 powerId) external view returns (bool) {
+        SafetyTypes.PowerDescriptor memory descriptor = powerInfo(powerId);
+        return SafetyCapabilities.isSensitivePowerDescriptor(descriptor, _powerProfiles[powerId]);
+    }
+
+    function auditCount() external view returns (uint256) {
+        return _auditIds.length;
+    }
+
+    function auditAt(uint256 index) external view returns (SafetyTypes.AuditRecord memory) {
+        if (index >= _auditIds.length) revert IndexOutOfBounds(index, _auditIds.length);
+        return _auditInfo[_auditIds[index]];
+    }
+
+    function auditInfo(bytes32 auditId) public view returns (SafetyTypes.AuditRecord memory) {
+        if (!_auditRegistered[auditId]) revert UnknownAudit(auditId);
+        return _auditInfo[auditId];
+    }
+
+    function isRegisteredAudit(bytes32 auditId) external view returns (bool) {
+        return _auditRegistered[auditId];
+    }
+
+    function auditContextInfo(bytes32 auditId)
+        external
+        view
+        returns (SafetyTypes.AuditContext memory)
+    {
+        if (!_auditContextRegistered[auditId]) revert UnknownAuditContext(auditId);
+        return _auditContextInfo[auditId];
+    }
+
+    function auditFindingCount() external view returns (uint256) {
+        return _auditFindingIds.length;
+    }
+
+    function auditFindingAt(uint256 index) external view returns (SafetyTypes.AuditFindingRecord memory) {
+        if (index >= _auditFindingIds.length) revert IndexOutOfBounds(index, _auditFindingIds.length);
+        return _auditFindingInfo[_auditFindingIds[index]];
+    }
+
+    function auditFindingInfo(bytes32 findingId)
+        external
+        view
+        returns (SafetyTypes.AuditFindingRecord memory)
+    {
+        if (!_auditFindingRegistered[findingId]) revert UnknownAuditFinding(findingId);
+        return _auditFindingInfo[findingId];
+    }
+
+    function auditFindingCountByStatus(SafetyTypes.AuditFindingStatus status)
+        external
+        view
+        returns (uint256)
+    {
+        return _auditFindingCountByStatus[uint8(status)];
+    }
+
+    function auditEvidenceNonce() external view returns (uint256) {
+        return _auditEvidenceNonce;
+    }
+
+    function auditEvidenceSummary() external view returns (SafetyTypes.AuditEvidenceSummary memory) {
+        return _auditEvidenceSummary;
+    }
+
+    function auditIssueCount() external view returns (uint256) {
+        return _auditIssues.length;
+    }
+
+    function auditIssueAt(uint256 index) external view returns (SafetyTypes.AuditIssue memory) {
+        if (index >= _auditIssues.length) revert IndexOutOfBounds(index, _auditIssues.length);
+        return _auditIssues[index];
+    }
+
+    function auditIssueCountByKind(SafetyTypes.AuditIssueKind kind) external view returns (uint256) {
+        return _auditIssueCountByKind[uint8(kind)];
+    }
+
+    function hasAuditIssue(SafetyTypes.AuditIssueKind kind) external view returns (bool) {
+        return _auditIssueCountByKind[uint8(kind)] != 0;
+    }
+
+    function hasTransitiveControlPath(bytes32 fromNodeId, bytes32 toNodeId) public view returns (bool) {
+        return _hasControlPath(fromNodeId, toNodeId);
+    }
+
+    function hasTransitiveControlPath(address fromAddress, address toAddress) external view returns (bool) {
+        bytes32 fromNodeId = _nodeIdByAddress[fromAddress];
+        bytes32 toNodeId = _nodeIdByAddress[toAddress];
+        return _hasControlPath(fromNodeId, toNodeId);
+    }
+
+    function hasTransitivePowerPath(
+        bytes32 fromNodeId,
+        address target,
+        SafetyTypes.PowerKind powerKind
+    ) public view returns (bool) {
+        return _hasPowerPath(fromNodeId, target, powerKind);
+    }
+
+    function hasTransitivePowerPath(
+        address fromAddress,
+        address target,
+        SafetyTypes.PowerKind powerKind
+    ) external view returns (bool) {
+        return _hasPowerPath(_nodeIdByAddress[fromAddress], target, powerKind);
+    }
+
+    function setProtocolMetadata(
+        string calldata protocolName_,
+        bytes32 manifestHash_,
+        string calldata manifestUri_,
+        string calldata metadataUri_,
+        bool publisherAssertedManifestClosure_
+    ) external onlyOwner {
+        if (bytes(protocolName_).length == 0) revert EmptyProtocolName();
+
+        _protocolMetadata.protocolName = protocolName_;
+        _protocolMetadata.manifestHash = manifestHash_;
+        _protocolMetadata.manifestURI = manifestUri_;
+        _protocolMetadata.metadataURI = metadataUri_;
+        _disclosureProfile.publisherAssertedManifestClosure = publisherAssertedManifestClosure_;
+
+        emit ProtocolMetadataUpdated(
+            protocolName_,
+            _protocolMetadata.standardVersion,
+            _protocolMetadata.chainId,
+            manifestHash_,
+            manifestUri_,
+            metadataUri_,
+            publisherAssertedManifestClosure_
+        );
+        _bumpDisclosureNonce();
+
+        _recomputeDerivedState();
+    }
+
+    function setDisclosureScope(SafetyTypes.DisclosureScope calldata scopeData) external onlyOwner {
+        SafetyTypes.DisclosureScope memory scopeCopy = scopeData;
+        _disclosureScope = scopeCopy;
+
+        _emitDisclosureScopeUpdated(scopeCopy);
+        _bumpDisclosureNonce();
+        _recomputeDerivedState();
+    }
+
+    function setComponent(SafetyTypes.Component calldata componentData) external onlyOwner {
+        if (componentData.component == address(0)) revert ZeroAddress();
+
+        bytes32 expectedNodeId = _nodeIdFromAddress(componentData.component);
+        if (componentData.nodeId != expectedNodeId) {
+            revert InvalidComponentNodeId(componentData.component, expectedNodeId, componentData.nodeId);
+        }
+
+        if (!_componentRegistered[componentData.component]) {
+            _componentRegistered[componentData.component] = true;
+            _componentList.push(componentData.component);
+        }
+
+        _componentInfo[componentData.component] = componentData;
+        _syncComponentNode(componentData);
+
+        emit ComponentSet(
+            componentData.component,
+            componentData.nodeId,
+            componentData.nodeType,
+            componentData.inManifest,
+            componentData.declaredReviewSensitive,
+            componentData.declaredFundsSensitive,
+            componentData.declaredExactVerified,
+            componentData.upgradeable,
+            componentData.implementation,
+            componentData.adminNodeId,
+            componentData.evidenceStrength,
+            componentData.metadataHash
+        );
+        _bumpDisclosureNonce();
+
+        _recomputeDerivedState();
+    }
+
+    function setGraphNode(SafetyTypes.GraphNode calldata nodeData) external onlyOwner {
+        _setGraphNode(nodeData);
+        _bumpDisclosureNonce();
+        _recomputeDerivedState();
+    }
+
+    function setPowerDescriptor(SafetyTypes.PowerDescriptor calldata powerData) external onlyOwner {
+        if (powerData.powerId == bytes32(0)) revert InvalidPowerId();
+        if (powerData.target == address(0)) revert ZeroAddress();
+
+        bytes32 expectedTargetNodeId = _nodeIdFromAddress(powerData.target);
+        if (powerData.targetNodeId != expectedTargetNodeId) {
+            revert InvalidTargetNodeId(powerData.powerId, expectedTargetNodeId, powerData.targetNodeId);
+        }
+
+        _validatePower(powerData);
+
+        if (_powerRegistered[powerData.powerId]) {
+            if (_powerInfo[powerData.powerId].target != powerData.target) {
+                revert ImmutablePowerTarget(
+                    powerData.powerId,
+                    _powerInfo[powerData.powerId].target,
+                    powerData.target
+                );
+            }
+
+            _powerInfo[powerData.powerId] = powerData;
+        } else {
+            _powerRegistered[powerData.powerId] = true;
+            _powerIds.push(powerData.powerId);
+            _powerInfo[powerData.powerId] = powerData;
+            _powerIdsByTarget[powerData.target].push(powerData.powerId);
+        }
+
+        emit PowerDescriptorSet(
+            powerData.powerId,
+            powerData.powerKind,
+            powerData.target,
+            powerData.targetNodeId,
+            powerData.controllerNodeId,
+            powerData.controllerType,
+            powerData.executionDelaySeconds,
+            powerData.emergencyBypass,
+            powerData.declaredImpactLevel,
+            powerData.declaredCanTouchUserFunds,
+            powerData.evidenceStrength
+        );
+        _bumpDisclosureNonce();
+
+        _recomputeDerivedState();
+    }
+
+    function setGraphEdge(SafetyTypes.GraphEdge calldata edgeData) external onlyOwner {
+        if (edgeData.edgeId == bytes32(0)) revert InvalidEdgeId();
+        if (edgeData.fromNodeId == bytes32(0) || edgeData.toNodeId == bytes32(0)) revert ZeroNodeId();
+
+        if (_edgeRegistered[edgeData.edgeId]) {
+            SafetyTypes.GraphEdge memory previousEdge = _edgeInfo[edgeData.edgeId];
+            if (
+                previousEdge.fromNodeId != edgeData.fromNodeId
+                    || previousEdge.toNodeId != edgeData.toNodeId
+            ) {
+                revert ImmutableEdgeEndpoints(
+                    edgeData.edgeId,
+                    previousEdge.fromNodeId,
+                    previousEdge.toNodeId,
+                    edgeData.fromNodeId,
+                    edgeData.toNodeId
+                );
+            }
+
+            _edgeInfo[edgeData.edgeId] = edgeData;
+        } else {
+            _edgeRegistered[edgeData.edgeId] = true;
+            _edgeIds.push(edgeData.edgeId);
+            _edgeInfo[edgeData.edgeId] = edgeData;
+            _outgoingEdgeIds[edgeData.fromNodeId].push(edgeData.edgeId);
+        }
+
+        emit GraphEdgeSet(
+            edgeData.edgeId,
+            edgeData.edgeKind,
+            edgeData.fromNodeId,
+            edgeData.toNodeId,
+            edgeData.powerKind,
+            edgeData.direct,
+            edgeData.transitive,
+            edgeData.declaredCanBypassDelay,
+            edgeData.declaredTouchesUserFunds,
+            edgeData.evidenceStrength
+        );
+        _bumpDisclosureNonce();
+
+        _recomputeDerivedState();
+    }
+
+    function setAuditRecord(SafetyTypes.AuditRecord calldata auditData) external onlyOwner {
+        if (auditData.auditId == bytes32(0)) revert InvalidAuditId();
+
+        if (!_auditRegistered[auditData.auditId]) {
+            _auditRegistered[auditData.auditId] = true;
+            _auditIds.push(auditData.auditId);
+        }
+
+        _auditInfo[auditData.auditId] = auditData;
+
+        emit AuditRecordSet(
+            auditData.auditId,
+            auditData.auditorName,
+            auditData.reportURI,
+            auditData.reportHash,
+            auditData.coveredManifestHash,
+            auditData.scope,
+            auditData.evidenceStrength
+        );
+        _bumpAuditEvidenceNonce();
+
+        _recomputeDerivedState();
+    }
+
+    function setAuditContext(SafetyTypes.AuditContext calldata applicabilityData)
+        external
+        onlyOwner
+    {
+        if (applicabilityData.auditId == bytes32(0)) revert InvalidAuditId();
+        if (!_auditRegistered[applicabilityData.auditId]) revert UnknownAudit(applicabilityData.auditId);
+
+        _auditContextRegistered[applicabilityData.auditId] = true;
+        _auditContextInfo[applicabilityData.auditId] = applicabilityData;
+
+        emit AuditContextSet(
+            applicabilityData.auditId,
+            applicabilityData.status,
+            applicabilityData.liveMatchesManifest,
+            applicabilityData.liveMatchesDeployment,
+            applicabilityData.stale,
+            applicabilityData.evidenceStrength
+        );
+        _bumpAuditEvidenceNonce();
+
+        _recomputeDerivedState();
+    }
+
+    function setAuditFinding(SafetyTypes.AuditFindingRecord calldata findingData) external onlyOwner {
+        if (findingData.findingId == bytes32(0)) revert InvalidAuditFindingId();
+        if (findingData.auditId == bytes32(0)) revert InvalidAuditId();
+        if (!_auditRegistered[findingData.auditId]) revert UnknownAudit(findingData.auditId);
+
+        if (_auditFindingRegistered[findingData.findingId]) {
+            bytes32 currentAuditId = _auditFindingInfo[findingData.findingId].auditId;
+            if (currentAuditId != findingData.auditId) {
+                revert ImmutableAuditAssociation(
+                    findingData.findingId,
+                    currentAuditId,
+                    findingData.auditId
+                );
+            }
+        } else {
+            _auditFindingRegistered[findingData.findingId] = true;
+            _auditFindingIds.push(findingData.findingId);
+        }
+
+        _auditFindingInfo[findingData.findingId] = findingData;
+
+        emit AuditFindingSet(
+            findingData.findingId,
+            findingData.auditId,
+            findingData.status,
+            findingData.declaredImpactLevel,
+            findingData.subjectId,
+            findingData.powerId,
+            findingData.privilegeRelated,
+            findingData.affectsUserFunds,
+            findingData.evidenceStrength
+        );
+        _bumpAuditEvidenceNonce();
+
+        _recomputeDerivedState();
+    }
+
+    function setClaimRecord(SafetyClaimsTypes.ClaimRecord memory claimData) external onlyOwner {
+        require(claimData.claimId != bytes32(0), "invalid claimId");
+
+        if (!_claimExists[claimData.claimId]) {
+            _claimExists[claimData.claimId] = true;
+            _claimIdList.push(claimData.claimId);
+        }
+
+        _claimRecords[claimData.claimId] = claimData;
+
+        emit ClaimRecordSet(
+            claimData.claimId,
+            claimData.claimType,
+            claimData.subjectType,
+            claimData.subjectId,
+            claimData.verifiability,
+            claimData.status,
+            claimData.supersedesClaimId
+        );
+
+        _bumpClaimsNonce();
+    }
+
+    function setAssumptionRecord(SafetyClaimsTypes.AssumptionRecord memory assumptionData) external onlyOwner {
+        require(assumptionData.assumptionId != bytes32(0), "invalid assumptionId");
+        require(_claimExists[assumptionData.claimId], "undeclared claim");
+
+        if (_assumptionExists[assumptionData.assumptionId]) {
+            require(
+                _assumptionRecords[assumptionData.assumptionId].claimId == assumptionData.claimId,
+                "assumption claim mismatch"
+            );
+        } else {
+            _assumptionExists[assumptionData.assumptionId] = true;
+            _assumptionIdList.push(assumptionData.assumptionId);
+            _claimAssumptionIds[assumptionData.claimId].push(assumptionData.assumptionId);
+        }
+
+        _assumptionRecords[assumptionData.assumptionId] = assumptionData;
+
+        emit AssumptionRecordSet(
+            assumptionData.assumptionId,
+            assumptionData.claimId,
+            assumptionData.kind,
+            assumptionData.status
+        );
+
+        _bumpClaimsNonce();
+    }
+
+    function setClaimEvidenceLink(SafetyClaimsTypes.ClaimEvidenceLink memory linkData) external onlyOwner {
+        require(linkData.linkId != bytes32(0), "invalid linkId");
+        require(_claimExists[linkData.claimId], "undeclared claim");
+
+        if (_claimEvidenceLinkExists[linkData.linkId]) {
+            require(
+                _claimEvidenceLinks[linkData.linkId].claimId == linkData.claimId,
+                "evidence claim mismatch"
+            );
+        } else {
+            _claimEvidenceLinkExists[linkData.linkId] = true;
+            _claimEvidenceLinkIdList.push(linkData.linkId);
+            _claimEvidenceLinkIds[linkData.claimId].push(linkData.linkId);
+        }
+
+        _claimEvidenceLinks[linkData.linkId] = linkData;
+
+        emit ClaimEvidenceLinkSet(linkData.linkId, linkData.claimId, linkData.kind, linkData.referenceId);
+
+        _bumpClaimsNonce();
+    }
+
+    function setDisclosureProfile(SafetyProfileTypes.DisclosureProfile memory profileData) external onlyOwner {
+        _disclosureProfile = profileData;
+
+        emit DisclosureProfileSet(
+            profileData.publisherAssertedManifestClosure,
+            profileData.publisherAssertedCoveredComponentsCompleteness,
+            profileData.publisherAssertedCoveredAssetsCompleteness
+        );
+
+        _bumpProfilesNonce();
+    }
+
+    function setComponentProfile(SafetyProfileTypes.ComponentProfile memory profileData) external onlyOwner {
+        if (!_componentRegistered[profileData.component]) revert UnknownComponent(profileData.component);
+
+        _componentProfiles[profileData.component] = profileData;
+
+        emit ComponentProfileSet(
+            profileData.component,
+            profileData.declaredReviewSensitive,
+            profileData.declaredFundsSensitive,
+            profileData.declaredExactVerified,
+            profileData.evidenceStrength
+        );
+
+        _bumpProfilesNonce();
+    }
+
+    function setNodeProfile(SafetyProfileTypes.NodeProfile memory profileData) external onlyOwner {
+        if (!_nodeRegistered[profileData.nodeId]) revert UnknownNode(profileData.nodeId);
+
+        _nodeProfiles[profileData.nodeId] = profileData;
+
+        emit NodeProfileSet(
+            profileData.nodeId,
+            profileData.declaredAuthority,
+            profileData.declaredReviewSensitive,
+            profileData.evidenceStrength
+        );
+
+        _bumpProfilesNonce();
+    }
+
+    function setPowerProfile(SafetyProfileTypes.PowerProfile memory profileData) external onlyOwner {
+        if (!_powerRegistered[profileData.powerId]) revert UnknownPower(profileData.powerId);
+
+        _powerProfiles[profileData.powerId] = profileData;
+
+        emit PowerProfileSet(
+            profileData.powerId,
+            profileData.declaredImpactLevel,
+            profileData.declaredCanTouchUserFunds,
+            profileData.evidenceStrength
+        );
+
+        _bumpProfilesNonce();
+    }
+
+    function setEdgeProfile(SafetyProfileTypes.EdgeProfile memory profileData) external onlyOwner {
+        if (!_edgeRegistered[profileData.edgeId]) revert UnknownEdge(profileData.edgeId);
+
+        _edgeProfiles[profileData.edgeId] = profileData;
+
+        emit EdgeProfileSet(
+            profileData.edgeId,
+            profileData.declaredCanBypassDelay,
+            profileData.declaredTouchesUserFunds,
+            profileData.evidenceStrength
+        );
+
+        _bumpProfilesNonce();
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override(ERC165, IERC165) returns (bool) {
+        return interfaceId == type(IProtocolSafetyCore).interfaceId
+            || interfaceId == type(IProtocolSafetySummary).interfaceId
+            || interfaceId == type(IProtocolSafetyAuditEvidence).interfaceId
+            || interfaceId == type(IProtocolSafetyCapabilities).interfaceId
+            || interfaceId == type(IProtocolSafetyClaims).interfaceId
+            || interfaceId == type(IProtocolSafetyProfiles).interfaceId
+            || interfaceId == type(IProtocolSafety).interfaceId
+            || super.supportsInterface(interfaceId);
+    }
+
+    function _bumpDisclosureNonce() internal {
+        unchecked {
+            ++_disclosureNonce;
+        }
+        emit DisclosureStateUpdated(_disclosureNonce);
+    }
+
+    function _bumpAuditEvidenceNonce() internal {
+        unchecked {
+            ++_auditEvidenceNonce;
+        }
+        emit AuditEvidenceStateUpdated(_auditEvidenceNonce);
+    }
+
+    function _bumpClaimsNonce() internal {
+        unchecked {
+            ++_claimsNonce;
+        }
+        emit ClaimsStateUpdated(_claimsNonce);
+    }
+
+    function _bumpProfilesNonce() internal {
+        unchecked {
+            ++_profilesNonce;
+        }
+        emit ProfilesStateUpdated(_profilesNonce);
+    }
+
+    function _emitDisclosureScopeUpdated(SafetyTypes.DisclosureScope memory scopeData) internal {
+        emit DisclosureScopeUpdated(
+            scopeData.scopeHash,
+            scopeData.coveredComponentsHash,
+            scopeData.coveredAssetsHash,
+            scopeData.excludedDependenciesHash,
+            scopeData.assumptionsHash,
+            scopeData.scopeURI,
+            scopeData.coverageURI,
+            scopeData.exclusionsURI,
+            scopeData.assumptionsURI,
+            scopeData.publisherAssertedCoveredComponentsCompleteness,
+            scopeData.publisherAssertedCoveredAssetsCompleteness
+        );
+    }
+
+    function _setGraphNode(SafetyTypes.GraphNode calldata nodeData) internal {
+        SafetyTypes.GraphNode memory copy = nodeData;
+        _upsertGraphNode(copy);
+    }
+
+    function _upsertGraphNode(SafetyTypes.GraphNode memory nodeData) internal {
+        if (nodeData.nodeId == bytes32(0)) revert ZeroNodeId();
+        if (nodeData.nodeAddress != address(0)) {
+            bytes32 currentNodeId = _nodeIdByAddress[nodeData.nodeAddress];
+            if (currentNodeId != bytes32(0) && currentNodeId != nodeData.nodeId) {
+                revert NodeAddressAlreadyBound(nodeData.nodeAddress, currentNodeId, nodeData.nodeId);
+            }
+            _nodeIdByAddress[nodeData.nodeAddress] = nodeData.nodeId;
+        }
+
+        if (!_nodeRegistered[nodeData.nodeId]) {
+            _nodeRegistered[nodeData.nodeId] = true;
+            _nodeIds.push(nodeData.nodeId);
+        }
+
+        _nodeInfo[nodeData.nodeId] = nodeData;
+
+        emit GraphNodeSet(
+            nodeData.nodeId,
+            nodeData.nodeAddress,
+            nodeData.nodeType,
+            nodeData.inManifest,
+            nodeData.declaredReviewSensitive,
+            nodeData.declaredAuthority,
+            nodeData.evidenceStrength,
+            nodeData.metadataHash
+        );
+    }
+
+    function _syncComponentNode(SafetyTypes.Component calldata componentData) internal {
+        SafetyTypes.GraphNode memory nodeData = SafetyTypes.GraphNode({
+            nodeId: componentData.nodeId,
+            nodeType: componentData.nodeType,
+            nodeAddress: componentData.component,
+            inManifest: componentData.inManifest,
+            declaredReviewSensitive: componentData.declaredReviewSensitive,
+            declaredAuthority: componentData.upgradeable || componentData.adminNodeId != bytes32(0),
+            evidenceStrength: componentData.evidenceStrength,
+            metadataHash: componentData.metadataHash
+        });
+
+        _upsertGraphNode(nodeData);
+    }
+
+    function _validatePower(SafetyTypes.PowerDescriptor calldata powerData) internal pure {
+        if (!powerData.enabled) {
+            if (
+                powerData.controllerNodeId != bytes32(0)
+                    || powerData.controllerType != SafetyTypes.ControllerType.NONE
+                    || powerData.threshold != 0
+                    || powerData.controllerCount != 0
+            ) {
+                revert DisabledPowerCannotDeclareController();
+            }
+
+            return;
+        }
+
+        if (powerData.controllerNodeId == bytes32(0)) revert ZeroNodeId();
+        if (powerData.threshold == 0) {
+            revert InvalidThreshold(powerData.threshold, powerData.controllerCount);
+        }
+        if (powerData.controllerCount != 0 && powerData.threshold > powerData.controllerCount) {
+            revert InvalidThreshold(powerData.threshold, powerData.controllerCount);
+        }
+    }
+
+    function _recomputeDerivedState() internal {
+        delete _findings;
+        delete _auditIssues;
+        delete _evidenceStrengthDistribution;
+        delete _auditEvidenceSummary;
+
+        for (uint8 i; i < SafetyCapabilities.FAILURE_KIND_COUNT; ++i) {
+            _findingCountByKind[i] = 0;
+        }
+        for (uint8 i; i < SafetyCapabilities.AUDIT_ISSUE_KIND_COUNT; ++i) {
+            _auditIssueCountByKind[i] = 0;
+        }
+        for (uint8 i; i < SafetyCapabilities.AUDIT_FINDING_STATUS_COUNT; ++i) {
+            _auditFindingCountByStatus[i] = 0;
+        }
+
+        _disclosureSummary = SafetyTypes.DisclosureSummary({
+            interfaceSupported: true,
+            manifestClaimedClosed: _disclosureProfile.publisherAssertedManifestClosure,
+            manifestClosed: true,
+            allNodesInManifest: true,
+            allPowersHaveKnownControllers: true,
+            allEdgesKnown: true,
+            declaredExactVerifiedSensitiveComponents: true,
+            componentCount: _componentList.length,
+            nodeCount: _nodeIds.length,
+            edgeCount: _edgeIds.length,
+            powerCount: _powerIds.length,
+            unknownPrivilegeCount: 0
+        });
+
+        _constraintSummary = SafetyTypes.ConstraintSummary({
+            noSingleKeySensitiveControl: true,
+            noZeroDelayFundsSensitiveUpgrade: true,
+            noUndisclosedDelegatecall: true,
+            noUndisclosedCustodian: true,
+            noUndisclosedBridgeAdapter: true,
+            sensitivePowersDelayed: true,
+            userFundsIsolated: true,
+            sensitivePowerCount: 0,
+            delayedSensitivePowerCount: 0
+        });
+
+        _auditEvidenceSummary = SafetyTypes.AuditEvidenceSummary({
+            auditEvidencePresent: false,
+            currentAuditApplies: false,
+            currentAuditExactMatch: false,
+            fullScopeAuditPresent: false,
+            privilegeGraphCoveragePresent: false,
+            proxyUpgradeCoveragePresent: false,
+            adminRoleCoveragePresent: false,
+            moduleCoveragePresent: false,
+            controlPathCoveragePresent: false,
+            staleOrDriftedAuditPresent: false,
+            unresolvedFindingsPresent: false,
+            disputedFindingsPresent: false,
+            acknowledgedFindingsPresent: false,
+            userInterpretationRisk: false,
+            auditCount: 0,
+            contextMatchedAuditCount: 0,
+            partialScopeAuditCount: 0,
+            unknownApplicabilityCount: 0,
+            driftedAuditCount: 0,
+            unresolvedFindingCount: 0,
+            disputedFindingCount: 0,
+            acknowledgedFindingCount: 0,
+            possiblyStaleAuditCount: 0
+        });
+
+        if (
+            _disclosureScope.scopeHash != bytes32(0)
+                && (
+                    !_disclosureScope.publisherAssertedCoveredComponentsCompleteness
+                        || !_disclosureScope.publisherAssertedCoveredAssetsCompleteness
+                )
+        ) {
+            _disclosureSummary.allNodesInManifest = false;
+            _disclosureSummary.manifestClosed = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.MANIFEST_CLOSURE_VIOLATION,
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                SafetyTypes.EvidenceStrength.SELF_DECLARED,
+                _disclosureScope.scopeHash
+            );
+        }
+
+        for (uint256 i; i < _componentList.length; ++i) {
+            _evaluateComponent(_componentInfo[_componentList[i]]);
+        }
+
+        for (uint256 i; i < _nodeIds.length; ++i) {
+            SafetyTypes.GraphNode memory nodeData = _nodeInfo[_nodeIds[i]];
+            _incrementEvidenceStrength(nodeData.evidenceStrength);
+
+            if (nodeData.nodeAddress != address(0) && _componentRegistered[nodeData.nodeAddress]) {
+                continue;
+            }
+
+            if (!nodeData.inManifest) {
+                _disclosureSummary.allNodesInManifest = false;
+                _disclosureSummary.manifestClosed = false;
+                _addFindingForOmittedNode(nodeData, bytes32(0));
+            }
+        }
+
+        for (uint256 i; i < _powerIds.length; ++i) {
+            _evaluatePower(_powerInfo[_powerIds[i]]);
+        }
+
+        for (uint256 i; i < _edgeIds.length; ++i) {
+            _evaluateEdge(_edgeInfo[_edgeIds[i]]);
+        }
+
+        _reviewCueSummary = SafetyTypes.ReviewCueSummary({
+            privilegeGraphReviewRequired: _requiresPrivilegeGraphReview(),
+            proxyUpgradeReviewRequired: _requiresProxyReview(),
+            adminRoleReviewRequired: _requiresAdminRoleReview(),
+            moduleReviewRequired: _requiresModuleReview(),
+            controlPathReviewRequired: _requiresControlPathReview()
+        });
+
+        for (uint256 i; i < _auditIds.length; ++i) {
+            _evaluateAuditRecord(_auditInfo[_auditIds[i]]);
+        }
+
+        for (uint256 i; i < _auditFindingIds.length; ++i) {
+            _evaluateAuditFinding(_auditFindingInfo[_auditFindingIds[i]]);
+        }
+
+        if (_auditIds.length == 0) {
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.NO_AUDIT_EVIDENCE,
+                bytes32(0),
+                bytes32(0),
+                bytes32(0),
+                SafetyTypes.EvidenceStrength.SELF_DECLARED,
+                bytes32(0)
+            );
+        }
+
+        emit DerivedStateRecomputed(
+            _findings.length,
+            _disclosureSummary.unknownPrivilegeCount,
+            _constraintSummary.sensitivePowerCount,
+            _constraintSummary.delayedSensitivePowerCount
+        );
+        emit AuditDerivedStateRecomputed(
+            _auditIssues.length,
+            _auditEvidenceSummary.contextMatchedAuditCount,
+            _auditEvidenceSummary.unresolvedFindingCount,
+            _auditEvidenceSummary.possiblyStaleAuditCount
+        );
+    }
+
+    function _evaluateComponent(SafetyTypes.Component memory componentData) internal {
+        _incrementEvidenceStrength(componentData.evidenceStrength);
+
+        if (!componentData.inManifest) {
+            _disclosureSummary.allNodesInManifest = false;
+            _disclosureSummary.manifestClosed = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.MANIFEST_CLOSURE_VIOLATION,
+                componentData.nodeId,
+                bytes32(0),
+                bytes32(0),
+                componentData.evidenceStrength,
+                componentData.metadataHash
+            );
+        }
+
+        if (componentData.declaredReviewSensitive && !componentData.declaredExactVerified) {
+            _disclosureSummary.declaredExactVerifiedSensitiveComponents = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.MISSING_EXACT_VERIFICATION_SENSITIVE_COMPONENT,
+                componentData.nodeId,
+                componentData.implementation == address(0) ? bytes32(0) : _nodeIdFromAddress(componentData.implementation),
+                bytes32(0),
+                componentData.evidenceStrength,
+                componentData.metadataHash
+            );
+        }
+
+        if (componentData.adminNodeId != bytes32(0) && !_nodeRegistered[componentData.adminNodeId]) {
+            _markUnknownPrivilege(
+                componentData.nodeId,
+                componentData.adminNodeId,
+                bytes32(0),
+                componentData.metadataHash
+            );
+            _addFinding(
+                SafetyTypes.DiagnosticKind.UNDISCLOSED_ADMIN_CONTROLLER,
+                componentData.nodeId,
+                componentData.adminNodeId,
+                bytes32(0),
+                componentData.evidenceStrength,
+                componentData.metadataHash
+            );
+        } else if (
+            componentData.adminNodeId != bytes32(0)
+                && !_nodeInfo[componentData.adminNodeId].inManifest
+        ) {
+            _disclosureSummary.manifestClosed = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.UNDISCLOSED_ADMIN_CONTROLLER,
+                componentData.nodeId,
+                componentData.adminNodeId,
+                bytes32(0),
+                componentData.evidenceStrength,
+                componentData.metadataHash
+            );
+        }
+
+        if (
+            componentData.upgradeable && componentData.implementation != address(0)
+                && !_componentRegistered[componentData.implementation]
+        ) {
+            bytes32 implementationNodeId = _nodeIdFromAddress(componentData.implementation);
+            _markUnknownPrivilege(
+                componentData.nodeId,
+                implementationNodeId,
+                bytes32(0),
+                componentData.metadataHash
+            );
+            _addFinding(
+                SafetyTypes.DiagnosticKind.MANIFEST_CLOSURE_VIOLATION,
+                componentData.nodeId,
+                implementationNodeId,
+                bytes32(0),
+                componentData.evidenceStrength,
+                componentData.metadataHash
+            );
+        }
+    }
+
+    function _evaluatePower(SafetyTypes.PowerDescriptor memory powerData) internal {
+        _incrementEvidenceStrength(powerData.evidenceStrength);
+
+        if (!powerData.enabled) {
+            return;
+        }
+
+        bool sensitivePower = SafetyCapabilities.isSensitivePowerDescriptor(powerData);
+
+        if (sensitivePower) {
+            _constraintSummary.sensitivePowerCount += 1;
+
+            bool delayedPower = powerData.executionDelaySeconds > 0 && !powerData.emergencyBypass;
+            if (delayedPower) {
+                _constraintSummary.delayedSensitivePowerCount += 1;
+            } else if (
+                powerData.powerKind != SafetyTypes.PowerKind.PAUSE_DEPOSITS
+                    && powerData.powerKind != SafetyTypes.PowerKind.PAUSE_WITHDRAWALS
+            ) {
+                _constraintSummary.sensitivePowersDelayed = false;
+            }
+        }
+
+        if (!_nodeRegistered[powerData.targetNodeId] || !_nodeInfo[powerData.targetNodeId].inManifest) {
+            _markUnknownPrivilege(
+                powerData.targetNodeId,
+                powerData.controllerNodeId,
+                powerData.powerId,
+                powerData.notesHash
+            );
+        }
+
+        if (!_nodeRegistered[powerData.controllerNodeId] || !_nodeInfo[powerData.controllerNodeId].inManifest) {
+            _disclosureSummary.allPowersHaveKnownControllers = false;
+            _markUnknownPrivilege(
+                powerData.targetNodeId,
+                powerData.controllerNodeId,
+                powerData.powerId,
+                powerData.notesHash
+            );
+        }
+
+        if (
+            powerData.controllerType == SafetyTypes.ControllerType.EOA && powerData.threshold <= 1
+                && sensitivePower
+        ) {
+            _constraintSummary.noSingleKeySensitiveControl = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.SINGLE_EOA_SENSITIVE_CONTROL,
+                powerData.targetNodeId,
+                powerData.controllerNodeId,
+                powerData.powerId,
+                powerData.evidenceStrength,
+                powerData.notesHash
+            );
+        }
+
+        if (
+            powerData.powerKind == SafetyTypes.PowerKind.UPGRADE && _isFundsSensitive(powerData.target)
+                && powerData.executionDelaySeconds == 0
+        ) {
+            _constraintSummary.noZeroDelayFundsSensitiveUpgrade = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.ZERO_DELAY_FUNDS_SENSITIVE_UPGRADE,
+                powerData.targetNodeId,
+                powerData.controllerNodeId,
+                powerData.powerId,
+                powerData.evidenceStrength,
+                powerData.notesHash
+            );
+        }
+
+        if (
+            powerData.declaredCanTouchUserFunds
+                && (powerData.executionDelaySeconds == 0
+                    || powerData.controllerType == SafetyTypes.ControllerType.EOA)
+        ) {
+            _constraintSummary.userFundsIsolated = false;
+        }
+
+        if (powerData.powerKind == SafetyTypes.PowerKind.DELEGATECALL_EXTENSION) {
+            if (!_nodeRegistered[powerData.controllerNodeId] || !_nodeInfo[powerData.controllerNodeId].inManifest) {
+                _constraintSummary.noUndisclosedDelegatecall = false;
+                _addFinding(
+                    SafetyTypes.DiagnosticKind.UNDISCLOSED_DELEGATECALL_EXTENSION,
+                    powerData.targetNodeId,
+                    powerData.controllerNodeId,
+                    powerData.powerId,
+                    powerData.evidenceStrength,
+                    powerData.notesHash
+                );
+            }
+        }
+
+        if (powerData.powerKind == SafetyTypes.PowerKind.MOVE_RESERVES) {
+            if (!_nodeRegistered[powerData.targetNodeId] || !_nodeInfo[powerData.targetNodeId].inManifest) {
+                _constraintSummary.noUndisclosedCustodian = false;
+                _addFinding(
+                    SafetyTypes.DiagnosticKind.OMITTED_RESERVE_CUSTODIAN,
+                    powerData.targetNodeId,
+                    powerData.controllerNodeId,
+                    powerData.powerId,
+                    powerData.evidenceStrength,
+                    powerData.notesHash
+                );
+            }
+        }
+    }
+
+    function _evaluateEdge(SafetyTypes.GraphEdge memory edgeData) internal {
+        _incrementEvidenceStrength(edgeData.evidenceStrength);
+
+        bool knownFrom = _nodeRegistered[edgeData.fromNodeId] && _nodeInfo[edgeData.fromNodeId].inManifest;
+        bool knownTo = _nodeRegistered[edgeData.toNodeId] && _nodeInfo[edgeData.toNodeId].inManifest;
+
+        if (!knownFrom || !knownTo) {
+            _disclosureSummary.allEdgesKnown = false;
+            _markUnknownPrivilege(edgeData.fromNodeId, edgeData.toNodeId, edgeData.edgeId, edgeData.notesHash);
+        }
+
+        if (edgeData.edgeKind == SafetyTypes.EdgeKind.CAN_DELEGATECALL && !knownTo) {
+            _constraintSummary.noUndisclosedDelegatecall = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.UNDISCLOSED_DELEGATECALL_EXTENSION,
+                edgeData.fromNodeId,
+                edgeData.toNodeId,
+                edgeData.edgeId,
+                edgeData.evidenceStrength,
+                edgeData.notesHash
+            );
+        }
+
+        if (edgeData.edgeKind == SafetyTypes.EdgeKind.CAN_INSTALL_MODULE && !knownTo) {
+            _addFinding(
+                SafetyTypes.DiagnosticKind.HIDDEN_MODULE_WITH_EXECUTION_RIGHTS,
+                edgeData.fromNodeId,
+                edgeData.toNodeId,
+                edgeData.edgeId,
+                edgeData.evidenceStrength,
+                edgeData.notesHash
+            );
+        }
+
+        if (_nodeRegistered[edgeData.toNodeId] && !_nodeInfo[edgeData.toNodeId].inManifest) {
+            _addFindingForOmittedNode(_nodeInfo[edgeData.toNodeId], edgeData.edgeId);
+        }
+    }
+
+    function _evaluateAuditRecord(SafetyTypes.AuditRecord memory auditData) internal {
+        _incrementEvidenceStrength(auditData.evidenceStrength);
+
+        _auditEvidenceSummary.auditEvidencePresent = true;
+        _auditEvidenceSummary.auditCount += 1;
+
+        if (auditData.scope == SafetyTypes.AuditScope.FULL) {
+            _auditEvidenceSummary.fullScopeAuditPresent = true;
+        } else {
+            _auditEvidenceSummary.partialScopeAuditCount += 1;
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_PARTIAL_SCOPE,
+                auditData.auditId,
+                bytes32(0),
+                bytes32(0),
+                auditData.evidenceStrength,
+                auditData.notesHash
+            );
+        }
+
+        if (auditData.coversPrivilegeGraph) {
+            _auditEvidenceSummary.privilegeGraphCoveragePresent = true;
+        } else if (_reviewCueSummary.privilegeGraphReviewRequired) {
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_MISSING_PRIVILEGE_GRAPH_REVIEW,
+                auditData.auditId,
+                bytes32(0),
+                bytes32(0),
+                auditData.evidenceStrength,
+                auditData.notesHash
+            );
+        }
+
+        if (auditData.coversProxyUpgradePaths) {
+            _auditEvidenceSummary.proxyUpgradeCoveragePresent = true;
+        } else if (_reviewCueSummary.proxyUpgradeReviewRequired) {
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_MISSING_PROXY_REVIEW,
+                auditData.auditId,
+                bytes32(0),
+                bytes32(0),
+                auditData.evidenceStrength,
+                auditData.notesHash
+            );
+        }
+
+        if (auditData.coversAdminRoles) {
+            _auditEvidenceSummary.adminRoleCoveragePresent = true;
+        } else if (_reviewCueSummary.adminRoleReviewRequired) {
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_MISSING_ADMIN_ROLE_REVIEW,
+                auditData.auditId,
+                bytes32(0),
+                bytes32(0),
+                auditData.evidenceStrength,
+                auditData.notesHash
+            );
+        }
+
+        if (auditData.coversModules) {
+            _auditEvidenceSummary.moduleCoveragePresent = true;
+        } else if (_reviewCueSummary.moduleReviewRequired) {
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_MISSING_MODULE_REVIEW,
+                auditData.auditId,
+                bytes32(0),
+                bytes32(0),
+                auditData.evidenceStrength,
+                auditData.notesHash
+            );
+        }
+
+        if (auditData.coversControlPaths) {
+            _auditEvidenceSummary.controlPathCoveragePresent = true;
+        } else if (_reviewCueSummary.controlPathReviewRequired) {
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_MISSING_CONTROL_PATH_REVIEW,
+                auditData.auditId,
+                bytes32(0),
+                bytes32(0),
+                auditData.evidenceStrength,
+                auditData.notesHash
+            );
+        }
+
+        if (!_auditHasSpecifiedTarget(auditData)) {
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_TARGET_UNSPECIFIED,
+                auditData.auditId,
+                bytes32(0),
+                bytes32(0),
+                auditData.evidenceStrength,
+                auditData.notesHash
+            );
+        }
+
+        if (!_auditContextRegistered[auditData.auditId]) {
+            _auditEvidenceSummary.unknownApplicabilityCount += 1;
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_APPLICABILITY_UNKNOWN,
+                auditData.auditId,
+                bytes32(0),
+                bytes32(0),
+                auditData.evidenceStrength,
+                auditData.notesHash
+            );
+            return;
+        }
+
+        _evaluateAuditContext(_auditContextInfo[auditData.auditId]);
+    }
+
+    function _evaluateAuditContext(SafetyTypes.AuditContext memory applicabilityData) internal {
+        _incrementEvidenceStrength(applicabilityData.evidenceStrength);
+
+        bool anyDrift = !applicabilityData.liveMatchesManifest
+            || !applicabilityData.liveMatchesBuild
+            || !applicabilityData.liveMatchesDeployment
+            || !applicabilityData.liveMatchesRuntimeConfig
+            || !applicabilityData.liveMatchesRoleConfig
+            || !applicabilityData.liveMatchesModules
+            || !applicabilityData.liveMatchesProxyTopology
+            || !applicabilityData.liveMatchesOracleConfig
+            || !applicabilityData.liveMatchesControllers;
+
+        bool exactMatch = applicabilityData.status == SafetyTypes.AuditContextStatus.MATCHES_LIVE_DEPLOYMENT
+            && !applicabilityData.stale && !anyDrift;
+
+        if (
+            applicabilityData.status == SafetyTypes.AuditContextStatus.MATCHES_LIVE_DEPLOYMENT
+                || applicabilityData.status == SafetyTypes.AuditContextStatus.PARTIAL_MATCH
+        ) {
+            _auditEvidenceSummary.currentAuditApplies = true;
+            _auditEvidenceSummary.contextMatchedAuditCount += 1;
+        }
+
+        if (exactMatch) {
+            _auditEvidenceSummary.currentAuditExactMatch = true;
+        }
+
+        if (applicabilityData.stale) {
+            _auditEvidenceSummary.possiblyStaleAuditCount += 1;
+            _auditEvidenceSummary.staleOrDriftedAuditPresent = true;
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.STALE_AUDIT_EVIDENCE,
+                applicabilityData.auditId,
+                bytes32(0),
+                bytes32(0),
+                applicabilityData.evidenceStrength,
+                applicabilityData.notesHash
+            );
+        }
+
+        if (applicabilityData.status == SafetyTypes.AuditContextStatus.UNKNOWN) {
+            _auditEvidenceSummary.unknownApplicabilityCount += 1;
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_APPLICABILITY_UNKNOWN,
+                applicabilityData.auditId,
+                bytes32(0),
+                bytes32(0),
+                applicabilityData.evidenceStrength,
+                applicabilityData.notesHash
+            );
+        } else if (applicabilityData.status == SafetyTypes.AuditContextStatus.DOES_NOT_APPLY) {
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_NOT_APPLICABLE,
+                applicabilityData.auditId,
+                bytes32(0),
+                bytes32(0),
+                applicabilityData.evidenceStrength,
+                applicabilityData.notesHash
+            );
+        } else if (
+            applicabilityData.status == SafetyTypes.AuditContextStatus.DRIFTED
+                || applicabilityData.status == SafetyTypes.AuditContextStatus.PARTIAL_MATCH
+                || anyDrift
+        ) {
+            _auditEvidenceSummary.driftedAuditCount += 1;
+            _auditEvidenceSummary.staleOrDriftedAuditPresent = true;
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.AUDIT_DRIFT_DETECTED,
+                applicabilityData.auditId,
+                bytes32(0),
+                bytes32(0),
+                applicabilityData.evidenceStrength,
+                applicabilityData.notesHash
+            );
+        }
+    }
+
+    function _evaluateAuditFinding(SafetyTypes.AuditFindingRecord memory findingData) internal {
+        _incrementEvidenceStrength(findingData.evidenceStrength);
+        _auditFindingCountByStatus[uint8(findingData.status)] += 1;
+
+        if (findingData.status == SafetyTypes.AuditFindingStatus.UNRESOLVED) {
+            _auditEvidenceSummary.unresolvedFindingsPresent = true;
+            _auditEvidenceSummary.unresolvedFindingCount += 1;
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.UNRESOLVED_AUDIT_FINDING,
+                findingData.auditId,
+                findingData.findingId,
+                findingData.subjectId,
+                findingData.evidenceStrength,
+                findingData.notesHash
+            );
+        } else if (findingData.status == SafetyTypes.AuditFindingStatus.DISPUTED) {
+            _auditEvidenceSummary.disputedFindingsPresent = true;
+            _auditEvidenceSummary.disputedFindingCount += 1;
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.DISPUTED_AUDIT_FINDING,
+                findingData.auditId,
+                findingData.findingId,
+                findingData.subjectId,
+                findingData.evidenceStrength,
+                findingData.notesHash
+            );
+        } else if (findingData.status == SafetyTypes.AuditFindingStatus.ACKNOWLEDGED) {
+            _auditEvidenceSummary.acknowledgedFindingsPresent = true;
+            _auditEvidenceSummary.acknowledgedFindingCount += 1;
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.ACKNOWLEDGED_AUDIT_FINDING,
+                findingData.auditId,
+                findingData.findingId,
+                findingData.subjectId,
+                findingData.evidenceStrength,
+                findingData.notesHash
+            );
+        } else if (findingData.status == SafetyTypes.AuditFindingStatus.STALE) {
+            _markAuditInterpretationRisk();
+            _addAuditIssue(
+                SafetyTypes.AuditIssueKind.STALE_AUDIT_EVIDENCE,
+                findingData.auditId,
+                findingData.findingId,
+                findingData.subjectId,
+                findingData.evidenceStrength,
+                findingData.notesHash
+            );
+        }
+    }
+
+    function _addAuditIssue(
+        SafetyTypes.AuditIssueKind kind,
+        bytes32 auditId,
+        bytes32 relatedFindingId,
+        bytes32 subjectId,
+        SafetyTypes.EvidenceStrength evidenceStrength,
+        bytes32 detailsHash
+    ) internal {
+        _auditIssueCountByKind[uint8(kind)] += 1;
+        _auditIssues.push(
+            SafetyTypes.AuditIssue({
+                kind: kind,
+                active: true,
+                auditId: auditId,
+                relatedFindingId: relatedFindingId,
+                subjectId: subjectId,
+                evidenceStrength: evidenceStrength,
+                detailsHash: detailsHash
+            })
+        );
+
+        emit AuditIssueRecorded(kind, auditId, relatedFindingId, subjectId, evidenceStrength, detailsHash);
+    }
+
+    function _markAuditInterpretationRisk() internal {
+        _auditEvidenceSummary.userInterpretationRisk = true;
+    }
+
+    function _auditHasSpecifiedTarget(SafetyTypes.AuditRecord memory auditData) internal pure returns (bool) {
+        return auditData.coveredManifestHash != bytes32(0)
+            || auditData.coveredBuildHash != bytes32(0)
+            || auditData.coveredCommitHash != bytes32(0)
+            || auditData.coveredDeploymentHash != bytes32(0);
+    }
+
+    function _addFindingForOmittedNode(
+        SafetyTypes.GraphNode memory nodeData,
+        bytes32 referenceId
+    ) internal {
+        _addFinding(
+            SafetyTypes.DiagnosticKind.MANIFEST_CLOSURE_VIOLATION,
+            nodeData.nodeId,
+            bytes32(0),
+            referenceId,
+            nodeData.evidenceStrength,
+            nodeData.metadataHash
+        );
+
+        if (nodeData.nodeType == SafetyTypes.NodeType.CUSTODIAN) {
+            _constraintSummary.noUndisclosedCustodian = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.OMITTED_RESERVE_CUSTODIAN,
+                nodeData.nodeId,
+                bytes32(0),
+                referenceId,
+                nodeData.evidenceStrength,
+                nodeData.metadataHash
+            );
+        } else if (nodeData.nodeType == SafetyTypes.NodeType.BRIDGE_ADAPTER) {
+            _constraintSummary.noUndisclosedBridgeAdapter = false;
+            _addFinding(
+                SafetyTypes.DiagnosticKind.OMITTED_BRIDGE_ADAPTER,
+                nodeData.nodeId,
+                bytes32(0),
+                referenceId,
+                nodeData.evidenceStrength,
+                nodeData.metadataHash
+            );
+        } else if (nodeData.nodeType == SafetyTypes.NodeType.MODULE) {
+            _addFinding(
+                SafetyTypes.DiagnosticKind.HIDDEN_MODULE_WITH_EXECUTION_RIGHTS,
+                nodeData.nodeId,
+                bytes32(0),
+                referenceId,
+                nodeData.evidenceStrength,
+                nodeData.metadataHash
+            );
+        } else if (nodeData.nodeType == SafetyTypes.NodeType.FALLBACK_HANDLER) {
+            _addFinding(
+                SafetyTypes.DiagnosticKind.OMITTED_FALLBACK_HANDLER,
+                nodeData.nodeId,
+                bytes32(0),
+                referenceId,
+                nodeData.evidenceStrength,
+                nodeData.metadataHash
+            );
+        } else if (nodeData.nodeType == SafetyTypes.NodeType.GUARD) {
+            _addFinding(
+                SafetyTypes.DiagnosticKind.OMITTED_GUARD,
+                nodeData.nodeId,
+                bytes32(0),
+                referenceId,
+                nodeData.evidenceStrength,
+                nodeData.metadataHash
+            );
+        }
+    }
+
+    function _markUnknownPrivilege(
+        bytes32 subjectId,
+        bytes32 relatedId,
+        bytes32 referenceId,
+        bytes32 detailsHash
+    ) internal {
+        _disclosureSummary.manifestClosed = false;
+        _disclosureSummary.unknownPrivilegeCount += 1;
+        _addFinding(
+            SafetyTypes.DiagnosticKind.UNKNOWN_PRIVILEGED_PATH,
+            subjectId,
+            relatedId,
+            referenceId,
+            SafetyTypes.EvidenceStrength.SELF_DECLARED,
+            detailsHash
+        );
+    }
+
+    function _addFinding(
+        SafetyTypes.DiagnosticKind kind,
+        bytes32 subjectId,
+        bytes32 relatedId,
+        bytes32 referenceId,
+        SafetyTypes.EvidenceStrength evidenceStrength,
+        bytes32 detailsHash
+    ) internal {
+        _findingCountByKind[uint8(kind)] += 1;
+        SafetyTypes.FindingCategory category = SafetyCapabilities.findingCategory(kind);
+        _findings.push(
+            SafetyTypes.DiagnosticFinding({
+                kind: kind,
+                category: category,
+                active: true,
+                subjectId: subjectId,
+                relatedId: relatedId,
+                referenceId: referenceId,
+                evidenceStrength: evidenceStrength,
+                detailsHash: detailsHash
+            })
+        );
+
+        emit FindingRecorded(kind, subjectId, referenceId, relatedId, category, evidenceStrength, detailsHash);
+    }
+
+    function _incrementEvidenceStrength(SafetyTypes.EvidenceStrength evidenceStrength) internal {
+        if (evidenceStrength == SafetyTypes.EvidenceStrength.SELF_DECLARED) {
+            _evidenceStrengthDistribution.selfDeclared += 1;
+        } else if (evidenceStrength == SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED) {
+            _evidenceStrengthDistribution.onchainDerived += 1;
+        } else if (evidenceStrength == SafetyTypes.EvidenceStrength.EXACT_VERIFIED) {
+            _evidenceStrengthDistribution.declaredExactVerified += 1;
+        } else if (evidenceStrength == SafetyTypes.EvidenceStrength.FORMALLY_PROVEN) {
+            _evidenceStrengthDistribution.formallyProven += 1;
+        }
+    }
+
+    function _requiresPrivilegeGraphReview() internal view returns (bool) {
+        if (_powerIds.length != 0 || _edgeIds.length != 0) {
+            return true;
+        }
+
+        for (uint256 i; i < _nodeIds.length; ++i) {
+            SafetyTypes.GraphNode memory nodeData = _nodeInfo[_nodeIds[i]];
+            if (nodeData.declaredAuthority || nodeData.declaredReviewSensitive) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function _requiresProxyReview() internal view returns (bool) {
+        for (uint256 i; i < _componentList.length; ++i) {
+            SafetyTypes.Component memory componentData = _componentInfo[_componentList[i]];
+            if (componentData.upgradeable || componentData.nodeType == SafetyTypes.NodeType.PROXY) {
+                return true;
+            }
+        }
+
+        for (uint256 i; i < _powerIds.length; ++i) {
+            if (_powerInfo[_powerIds[i]].powerKind == SafetyTypes.PowerKind.UPGRADE) {
+                return true;
+            }
+        }
+
+        for (uint256 i; i < _edgeIds.length; ++i) {
+            if (_edgeInfo[_edgeIds[i]].edgeKind == SafetyTypes.EdgeKind.CAN_UPGRADE) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function _requiresAdminRoleReview() internal view returns (bool) {
+        for (uint256 i; i < _nodeIds.length; ++i) {
+            SafetyTypes.NodeType nodeType = _nodeInfo[_nodeIds[i]].nodeType;
+            if (nodeType == SafetyTypes.NodeType.ACCESS_MANAGER || nodeType == SafetyTypes.NodeType.ROLE_ADMIN) {
+                return true;
+            }
+        }
+
+        for (uint256 i; i < _powerIds.length; ++i) {
+            SafetyTypes.PowerDescriptor memory powerData = _powerInfo[_powerIds[i]];
+            if (
+                powerData.powerKind == SafetyTypes.PowerKind.GRANT_ROLE
+                    || powerData.powerKind == SafetyTypes.PowerKind.REVOKE_ROLE
+                    || powerData.controllerType == SafetyTypes.ControllerType.ACCESS_MANAGER
+            ) {
+                return true;
+            }
+        }
+
+        for (uint256 i; i < _edgeIds.length; ++i) {
+            SafetyTypes.EdgeKind edgeKind = _edgeInfo[_edgeIds[i]].edgeKind;
+            if (
+                edgeKind == SafetyTypes.EdgeKind.CAN_GRANT_ROLE
+                    || edgeKind == SafetyTypes.EdgeKind.CAN_REVOKE_ROLE
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function _requiresModuleReview() internal view returns (bool) {
+        for (uint256 i; i < _nodeIds.length; ++i) {
+            SafetyTypes.NodeType nodeType = _nodeInfo[_nodeIds[i]].nodeType;
+            if (
+                nodeType == SafetyTypes.NodeType.MODULE
+                    || nodeType == SafetyTypes.NodeType.GUARD
+                    || nodeType == SafetyTypes.NodeType.FALLBACK_HANDLER
+            ) {
+                return true;
+            }
+        }
+
+        for (uint256 i; i < _powerIds.length; ++i) {
+            SafetyTypes.PowerKind powerKind = _powerInfo[_powerIds[i]].powerKind;
+            if (
+                powerKind == SafetyTypes.PowerKind.INSTALL_MODULE
+                    || powerKind == SafetyTypes.PowerKind.DELEGATECALL_EXTENSION
+            ) {
+                return true;
+            }
+        }
+
+        for (uint256 i; i < _edgeIds.length; ++i) {
+            SafetyTypes.EdgeKind edgeKind = _edgeInfo[_edgeIds[i]].edgeKind;
+            if (
+                edgeKind == SafetyTypes.EdgeKind.CAN_INSTALL_MODULE
+                    || edgeKind == SafetyTypes.EdgeKind.CAN_DELEGATECALL
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function _requiresControlPathReview() internal view returns (bool) {
+        return _powerIds.length != 0 || _edgeIds.length != 0;
+    }
+
+    function _hasControlPath(bytes32 fromNodeId, bytes32 toNodeId) internal view returns (bool) {
+        if (fromNodeId == bytes32(0) || toNodeId == bytes32(0)) {
+            return false;
+        }
+        bytes32[] memory visited = new bytes32[](_nodeIds.length + 1);
+        return _dfsControl(fromNodeId, toNodeId, visited, 0);
+    }
+
+    function _dfsControl(
+        bytes32 currentNodeId,
+        bytes32 targetNodeId,
+        bytes32[] memory visited,
+        uint256 visitedLength
+    ) internal view returns (bool) {
+        if (currentNodeId == targetNodeId) {
+            return true;
+        }
+        if (_containsNodeId(visited, visitedLength, currentNodeId)) {
+            return false;
+        }
+
+        visited[visitedLength] = currentNodeId;
+        uint256 nextVisitedLength = visitedLength + 1;
+        bytes32[] storage outgoingEdgeIds = _outgoingEdgeIds[currentNodeId];
+
+        for (uint256 i; i < outgoingEdgeIds.length; ++i) {
+            SafetyTypes.GraphEdge memory edgeData = _edgeInfo[outgoingEdgeIds[i]];
+            if (_dfsControl(edgeData.toNodeId, targetNodeId, visited, nextVisitedLength)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function _hasPowerPath(
+        bytes32 fromNodeId,
+        address target,
+        SafetyTypes.PowerKind powerKind
+    ) internal view returns (bool) {
+        bytes32 targetNodeId = _nodeIdByAddress[target];
+        if (targetNodeId == bytes32(0)) {
+            targetNodeId = _nodeIdFromAddress(target);
+        }
+        if (fromNodeId == bytes32(0) || targetNodeId == bytes32(0)) {
+            return false;
+        }
+
+        bytes32[] memory visited = new bytes32[](_nodeIds.length + 1);
+        return _dfsPower(fromNodeId, targetNodeId, powerKind, visited, 0);
+    }
+
+    function _dfsPower(
+        bytes32 currentNodeId,
+        bytes32 targetNodeId,
+        SafetyTypes.PowerKind powerKind,
+        bytes32[] memory visited,
+        uint256 visitedLength
+    ) internal view returns (bool) {
+        if (_containsNodeId(visited, visitedLength, currentNodeId)) {
+            return false;
+        }
+
+        visited[visitedLength] = currentNodeId;
+        uint256 nextVisitedLength = visitedLength + 1;
+        bytes32[] storage outgoingEdgeIds = _outgoingEdgeIds[currentNodeId];
+
+        for (uint256 i; i < outgoingEdgeIds.length; ++i) {
+            SafetyTypes.GraphEdge memory edgeData = _edgeInfo[outgoingEdgeIds[i]];
+            if (
+                edgeData.toNodeId == targetNodeId
+                    && (
+                        edgeData.powerKind == powerKind
+                            || SafetyCapabilities.edgeMatchesPower(edgeData.edgeKind, powerKind)
+                    )
+            ) {
+                return true;
+            }
+            if (_dfsPower(edgeData.toNodeId, targetNodeId, powerKind, visited, nextVisitedLength)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function _containsNodeId(
+        bytes32[] memory nodeIds,
+        uint256 length,
+        bytes32 needle
+    ) internal pure returns (bool) {
+        for (uint256 i; i < length; ++i) {
+            if (nodeIds[i] == needle) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function _isFundsSensitive(address target) internal view returns (bool) {
+        return _componentRegistered[target] && _componentInfo[target].declaredFundsSensitive;
+    }
+
+    function _nodeIdFromAddress(address nodeAddress) internal pure returns (bytes32) {
+        return SafetyCapabilities.nodeIdFromAddress(nodeAddress);
+    }
+}
+
+
+
+

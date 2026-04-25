@@ -1,0 +1,477 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/schema/protocol-safety.schema.json",
+  "title": "Protocol Safety Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolName",
+    "standardVersion",
+    "chainId",
+    "module",
+    "manifestHashStrategy",
+    "manifestHash",
+    "manifestURI",
+    "metadataURI",
+    "manifestClosureClaimed",
+    "supportedInterfaces",
+    "disclosureScope",
+    "components",
+    "nodes",
+    "powers",
+    "edges",
+    "findings",
+    "verificationReferences",
+    "summaryExtension",
+    "auditEvidenceExtension"
+  ],
+  "properties": {
+    "protocolName": {"type": "string", "minLength": 1},
+    "standardVersion": {"type": "integer", "minimum": 1},
+    "chainId": {"type": "integer", "minimum": 1},
+    "module": {"$ref": "#/$defs/address"},
+    "manifestHashStrategy": {
+      "type": "string",
+      "enum": ["keccak256-canonical-json-v1"]
+    },
+    "manifestHash": {"$ref": "#/$defs/bytes32"},
+    "manifestURI": {"type": "string", "minLength": 1},
+    "metadataURI": {"type": "string", "minLength": 1},
+    "manifestClosureClaimed": {"type": "boolean"},
+    "supportedInterfaces": {"$ref": "#/$defs/supportedInterfaces"},
+    "disclosureScope": {"$ref": "#/$defs/disclosureScope"},
+    "components": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/component"}
+    },
+    "nodes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/node"}
+    },
+    "powers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/power"}
+    },
+    "edges": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/edge"}
+    },
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/complianceFinding"}
+    },
+    "verificationReferences": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/verificationReference"}
+    },
+    "summaryExtension": {"$ref": "#/$defs/summaryExtension"},
+    "auditEvidenceExtension": {"$ref": "#/$defs/auditEvidenceExtension"},
+    "verifierReport": {"$ref": "#/$defs/verifierReport"}
+  },
+  "$defs": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{40}$"
+    },
+    "bytes32": {
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{64}$"
+    },
+    "proofLevel": {
+      "type": "string",
+      "enum": ["SELF_DECLARED", "ONCHAIN_DERIVED", "EXACT_VERIFIED", "FORMALLY_PROVEN"]
+    },
+    "controllerType": {
+      "type": "string",
+      "enum": ["NONE", "EOA", "MULTISIG", "TIMELOCK", "ACCESS_MANAGER", "DAO", "MODULE", "GUARDIAN", "BRIDGE", "CUSTOM"]
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["GLOBAL", "CONTRACT", "FUNCTION_SELECTOR", "PARAMETER_RANGE", "ASSET", "USER_SET", "MODULE_SET", "BRIDGE_ROUTE", "CUSTODY_POOL", "OTHER"]
+    },
+    "impactLevel": {
+      "type": "string",
+      "enum": ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL", "UNBOUNDED"]
+    },
+    "nodeType": {
+      "type": "string",
+      "enum": ["CONTRACT", "PROXY", "IMPLEMENTATION", "PROXY_ADMIN", "TIMELOCK", "MULTISIG", "MODULE", "GUARD", "FALLBACK_HANDLER", "BRIDGE_ADAPTER", "CUSTODIAN", "ORACLE_MANAGER", "GOVERNANCE_EXECUTOR", "ACCESS_MANAGER", "ROLE_ADMIN", "BEACON", "EMERGENCY_CONTROLLER", "TREASURY", "OTHER"]
+    },
+    "powerKind": {
+      "type": "string",
+      "enum": ["UPGRADE", "PAUSE_DEPOSITS", "PAUSE_WITHDRAWALS", "MINT", "BURN", "BLACKLIST", "SWEEP_FUNDS", "MOVE_RESERVES", "CHANGE_FEES", "CHANGE_ORACLE", "CHANGE_RISK_PARAMS", "ARBITRARY_CALL", "GRANT_ROLE", "REVOKE_ROLE", "INSTALL_MODULE", "DELEGATECALL_EXTENSION", "BYPASS_DELAY"]
+    },
+    "edgeKind": {
+      "type": "string",
+      "enum": ["CONTROLS", "CAN_UPGRADE", "CAN_PAUSE", "CAN_MINT", "CAN_BURN", "CAN_BLACKLIST", "CAN_SWEEP_FUNDS", "CAN_MOVE_RESERVES", "CAN_CHANGE_FEES", "CAN_CHANGE_ORACLE", "CAN_CHANGE_RISK_PARAMS", "CAN_ARBITRARY_CALL", "CAN_GRANT_ROLE", "CAN_REVOKE_ROLE", "CAN_INSTALL_MODULE", "CAN_DELEGATECALL", "CAN_BYPASS_DELAY"]
+    },
+    "failureKind": {
+      "type": "string",
+      "enum": ["MANIFEST_CLOSURE_VIOLATION", "UNKNOWN_PRIVILEGED_PATH", "SINGLE_EOA_CRITICAL_CONTROL", "ZERO_DELAY_CUSTODY_UPGRADE", "UNDISCLOSED_DELEGATECALL_EXTENSION", "OMITTED_RESERVE_CUSTODIAN", "OMITTED_BRIDGE_ADAPTER", "HIDDEN_MODULE_WITH_EXECUTION_RIGHTS", "OMITTED_FALLBACK_HANDLER", "OMITTED_GUARD", "UNDISCLOSED_ADMIN_CONTROLLER", "MISSING_EXACT_VERIFICATION_CRITICAL_COMPONENT"]
+    },
+    "findingCategory": {
+      "type": "string",
+      "enum": ["DISCLOSURE", "CONSTRAINT", "MANIFEST_CLOSURE", "VERIFICATION"]
+    },
+    "auditScope": {
+      "type": "string",
+      "enum": ["UNKNOWN", "PARTIAL", "FULL"]
+    },
+    "auditApplicabilityStatus": {
+      "type": "string",
+      "enum": ["UNKNOWN", "MATCHES_LIVE_DEPLOYMENT", "PARTIAL_MATCH", "DRIFTED", "DOES_NOT_APPLY"]
+    },
+    "auditFindingStatus": {
+      "type": "string",
+      "enum": ["UNKNOWN", "RESOLVED", "UNRESOLVED", "DISPUTED", "ACKNOWLEDGED", "STALE"]
+    },
+    "auditIssueKind": {
+      "type": "string",
+      "enum": ["NO_AUDIT_EVIDENCE", "AUDIT_TARGET_UNSPECIFIED", "AUDIT_PARTIAL_SCOPE", "AUDIT_APPLICABILITY_UNKNOWN", "AUDIT_NOT_APPLICABLE", "AUDIT_DRIFT_DETECTED", "STALE_AUDIT_EVIDENCE", "UNRESOLVED_AUDIT_FINDING", "DISPUTED_AUDIT_FINDING", "ACKNOWLEDGED_AUDIT_FINDING", "AUDIT_MISSING_PRIVILEGE_GRAPH_REVIEW", "AUDIT_MISSING_PROXY_REVIEW", "AUDIT_MISSING_ADMIN_ROLE_REVIEW", "AUDIT_MISSING_MODULE_REVIEW", "AUDIT_MISSING_CONTROL_PATH_REVIEW"]
+    },
+    "supportedInterfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core", "summary", "auditEvidence", "aggregate"],
+      "properties": {
+        "core": {"type": "boolean"},
+        "summary": {"type": "boolean"},
+        "auditEvidence": {"type": "boolean"},
+        "aggregate": {"type": "boolean"}
+      }
+    },
+    "disclosureScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scopeHash", "coveredComponentsHash", "coveredAssetsHash", "excludedDependenciesHash", "assumptionsHash", "scopeURI", "coverageURI", "exclusionsURI", "assumptionsURI", "includesAllPrivilegeRelevantComponents", "includesAllUserFacingAssets"],
+      "properties": {
+        "scopeHash": {"$ref": "#/$defs/bytes32"},
+        "coveredComponentsHash": {"$ref": "#/$defs/bytes32"},
+        "coveredAssetsHash": {"$ref": "#/$defs/bytes32"},
+        "excludedDependenciesHash": {"$ref": "#/$defs/bytes32"},
+        "assumptionsHash": {"$ref": "#/$defs/bytes32"},
+        "scopeURI": {"type": "string"},
+        "coverageURI": {"type": "string"},
+        "exclusionsURI": {"type": "string"},
+        "assumptionsURI": {"type": "string"},
+        "includesAllPrivilegeRelevantComponents": {"type": "boolean"},
+        "includesAllUserFacingAssets": {"type": "boolean"}
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "nodeId", "nodeType", "inManifest", "critical", "custodyCritical", "exactVerified", "upgradeable", "implementation", "adminNodeId", "proofLevel", "metadataHash"],
+      "properties": {
+        "address": {"$ref": "#/$defs/address"},
+        "nodeId": {"$ref": "#/$defs/bytes32"},
+        "nodeType": {"$ref": "#/$defs/nodeType"},
+        "inManifest": {"type": "boolean"},
+        "critical": {"type": "boolean"},
+        "custodyCritical": {"type": "boolean"},
+        "exactVerified": {"type": "boolean"},
+        "upgradeable": {"type": "boolean"},
+        "implementation": {"$ref": "#/$defs/address"},
+        "adminNodeId": {"$ref": "#/$defs/bytes32"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "metadataHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "nodeType", "inManifest", "critical", "authority", "proofLevel", "metadataHash"],
+      "properties": {
+        "nodeId": {"$ref": "#/$defs/bytes32"},
+        "nodeAddress": {"$ref": "#/$defs/address"},
+        "nodeType": {"$ref": "#/$defs/nodeType"},
+        "inManifest": {"type": "boolean"},
+        "critical": {"type": "boolean"},
+        "authority": {"type": "boolean"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "metadataHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "power": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["powerId", "powerKind", "enabled", "target", "targetNodeId", "controllerType", "controllerNodeId", "threshold", "controllerCount", "executionDelaySeconds", "emergencyBypass", "scope", "impactLevel", "maxImpactValue", "canTouchUserFunds", "rateLimit", "rateLimitWindowSeconds", "revocable", "proofLevel", "scopeHash", "notesHash"],
+      "properties": {
+        "powerId": {"$ref": "#/$defs/bytes32"},
+        "powerKind": {"$ref": "#/$defs/powerKind"},
+        "enabled": {"type": "boolean"},
+        "target": {"$ref": "#/$defs/address"},
+        "targetNodeId": {"$ref": "#/$defs/bytes32"},
+        "controllerType": {"$ref": "#/$defs/controllerType"},
+        "controllerNodeId": {"$ref": "#/$defs/bytes32"},
+        "threshold": {"type": "integer", "minimum": 0},
+        "controllerCount": {"type": "integer", "minimum": 0},
+        "executionDelaySeconds": {"type": "integer", "minimum": 0},
+        "emergencyBypass": {"type": "boolean"},
+        "scope": {"$ref": "#/$defs/scope"},
+        "impactLevel": {"$ref": "#/$defs/impactLevel"},
+        "maxImpactValue": {"type": "integer", "minimum": 0},
+        "canTouchUserFunds": {"type": "boolean"},
+        "rateLimit": {"type": "integer", "minimum": 0},
+        "rateLimitWindowSeconds": {"type": "integer", "minimum": 0},
+        "revocable": {"type": "boolean"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "scopeHash": {"$ref": "#/$defs/bytes32"},
+        "notesHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edgeId", "edgeKind", "powerKind", "fromNodeId", "toNodeId", "direct", "transitive", "canBypassDelay", "touchesUserFunds", "proofLevel", "notesHash"],
+      "properties": {
+        "edgeId": {"$ref": "#/$defs/bytes32"},
+        "edgeKind": {"$ref": "#/$defs/edgeKind"},
+        "powerKind": {"$ref": "#/$defs/powerKind"},
+        "fromNodeId": {"$ref": "#/$defs/bytes32"},
+        "toNodeId": {"$ref": "#/$defs/bytes32"},
+        "direct": {"type": "boolean"},
+        "transitive": {"type": "boolean"},
+        "canBypassDelay": {"type": "boolean"},
+        "touchesUserFunds": {"type": "boolean"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "notesHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "complianceFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "category", "active", "subjectId", "relatedId", "referenceId", "proofLevel", "detailsHash"],
+      "properties": {
+        "kind": {"$ref": "#/$defs/failureKind"},
+        "category": {"$ref": "#/$defs/findingCategory"},
+        "active": {"type": "boolean"},
+        "subjectId": {"$ref": "#/$defs/bytes32"},
+        "relatedId": {"$ref": "#/$defs/bytes32"},
+        "referenceId": {"$ref": "#/$defs/bytes32"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "detailsHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "verificationReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subjectId", "exactVerified", "sourceURI", "buildInfoURI", "metadataURI"],
+      "properties": {
+        "subjectId": {"$ref": "#/$defs/bytes32"},
+        "subjectAddress": {"$ref": "#/$defs/address"},
+        "exactVerified": {"type": "boolean"},
+        "sourceURI": {"type": "string", "minLength": 1},
+        "buildInfoURI": {"type": "string", "minLength": 1},
+        "metadataURI": {"type": "string", "minLength": 1}
+      }
+    },
+    "disclosureSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interfaceSupported", "manifestClaimedClosed", "manifestClosed", "allNodesInManifest", "allPowersHaveKnownControllers", "allEdgesKnown", "exactVerifiedCriticalComponents", "componentCount", "nodeCount", "edgeCount", "powerCount", "unknownPrivilegeCount"],
+      "properties": {
+        "interfaceSupported": {"type": "boolean"},
+        "manifestClaimedClosed": {"type": "boolean"},
+        "manifestClosed": {"type": "boolean"},
+        "allNodesInManifest": {"type": "boolean"},
+        "allPowersHaveKnownControllers": {"type": "boolean"},
+        "allEdgesKnown": {"type": "boolean"},
+        "exactVerifiedCriticalComponents": {"type": "boolean"},
+        "componentCount": {"type": "integer", "minimum": 0},
+        "nodeCount": {"type": "integer", "minimum": 0},
+        "edgeCount": {"type": "integer", "minimum": 0},
+        "powerCount": {"type": "integer", "minimum": 0},
+        "unknownPrivilegeCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "constraintSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["noSingleKeyCriticalControl", "noZeroDelayCustodyUpgrade", "noUndisclosedDelegatecall", "noUndisclosedCustodian", "noUndisclosedBridgeAdapter", "criticalPowersDelayed", "userFundsIsolated", "criticalPowerCount", "delayedCriticalPowerCount"],
+      "properties": {
+        "noSingleKeyCriticalControl": {"type": "boolean"},
+        "noZeroDelayCustodyUpgrade": {"type": "boolean"},
+        "noUndisclosedDelegatecall": {"type": "boolean"},
+        "noUndisclosedCustodian": {"type": "boolean"},
+        "noUndisclosedBridgeAdapter": {"type": "boolean"},
+        "criticalPowersDelayed": {"type": "boolean"},
+        "userFundsIsolated": {"type": "boolean"},
+        "criticalPowerCount": {"type": "integer", "minimum": 0},
+        "delayedCriticalPowerCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "reviewRequirementSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["privilegeGraphReviewRequired", "proxyUpgradeReviewRequired", "adminRoleReviewRequired", "moduleReviewRequired", "controlPathReviewRequired"],
+      "properties": {
+        "privilegeGraphReviewRequired": {"type": "boolean"},
+        "proxyUpgradeReviewRequired": {"type": "boolean"},
+        "adminRoleReviewRequired": {"type": "boolean"},
+        "moduleReviewRequired": {"type": "boolean"},
+        "controlPathReviewRequired": {"type": "boolean"}
+      }
+    },
+    "proofLevelDistribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selfDeclared", "onchainDerived", "exactVerified", "formallyProven"],
+      "properties": {
+        "selfDeclared": {"type": "integer", "minimum": 0},
+        "onchainDerived": {"type": "integer", "minimum": 0},
+        "exactVerified": {"type": "integer", "minimum": 0},
+        "formallyProven": {"type": "integer", "minimum": 0}
+      }
+    },
+    "summaryExtension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disclosureSummary", "constraintSummary", "reviewRequirementSummary", "proofLevelDistribution"],
+      "properties": {
+        "disclosureSummary": {"$ref": "#/$defs/disclosureSummary"},
+        "constraintSummary": {"$ref": "#/$defs/constraintSummary"},
+        "reviewRequirementSummary": {"$ref": "#/$defs/reviewRequirementSummary"},
+        "proofLevelDistribution": {"$ref": "#/$defs/proofLevelDistribution"}
+      }
+    },
+    "auditRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["auditId", "auditorName", "reportURI", "reportHash", "reportMetadataHash", "coveredManifestHash", "coveredBuildHash", "coveredCommitHash", "coveredDeploymentHash", "issuedAt", "scope", "publicReport", "coversPrivilegeGraph", "coversProxyUpgradePaths", "coversAdminRoles", "coversModules", "coversControlPaths", "coversOracleConfig", "coversRuntimeConfig", "proofLevel", "notesHash"],
+      "properties": {
+        "auditId": {"$ref": "#/$defs/bytes32"},
+        "auditorName": {"type": "string", "minLength": 1},
+        "reportURI": {"type": "string", "minLength": 1},
+        "reportHash": {"$ref": "#/$defs/bytes32"},
+        "reportMetadataHash": {"$ref": "#/$defs/bytes32"},
+        "coveredManifestHash": {"$ref": "#/$defs/bytes32"},
+        "coveredBuildHash": {"$ref": "#/$defs/bytes32"},
+        "coveredCommitHash": {"$ref": "#/$defs/bytes32"},
+        "coveredDeploymentHash": {"$ref": "#/$defs/bytes32"},
+        "issuedAt": {"type": "integer", "minimum": 0},
+        "scope": {"$ref": "#/$defs/auditScope"},
+        "publicReport": {"type": "boolean"},
+        "coversPrivilegeGraph": {"type": "boolean"},
+        "coversProxyUpgradePaths": {"type": "boolean"},
+        "coversAdminRoles": {"type": "boolean"},
+        "coversModules": {"type": "boolean"},
+        "coversControlPaths": {"type": "boolean"},
+        "coversOracleConfig": {"type": "boolean"},
+        "coversRuntimeConfig": {"type": "boolean"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "notesHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "auditApplicability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["auditId", "status", "liveMatchesManifest", "liveMatchesBuild", "liveMatchesDeployment", "liveMatchesRuntimeConfig", "liveMatchesRoleConfig", "liveMatchesModules", "liveMatchesProxyTopology", "liveMatchesOracleConfig", "liveMatchesControllers", "stale", "proofLevel", "notesHash"],
+      "properties": {
+        "auditId": {"$ref": "#/$defs/bytes32"},
+        "status": {"$ref": "#/$defs/auditApplicabilityStatus"},
+        "liveMatchesManifest": {"type": "boolean"},
+        "liveMatchesBuild": {"type": "boolean"},
+        "liveMatchesDeployment": {"type": "boolean"},
+        "liveMatchesRuntimeConfig": {"type": "boolean"},
+        "liveMatchesRoleConfig": {"type": "boolean"},
+        "liveMatchesModules": {"type": "boolean"},
+        "liveMatchesProxyTopology": {"type": "boolean"},
+        "liveMatchesOracleConfig": {"type": "boolean"},
+        "liveMatchesControllers": {"type": "boolean"},
+        "stale": {"type": "boolean"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "notesHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "auditFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["findingId", "auditId", "impactLevel", "status", "privilegeRelated", "affectsUserFunds", "subjectId", "powerId", "proofLevel", "titleHash", "notesHash"],
+      "properties": {
+        "findingId": {"$ref": "#/$defs/bytes32"},
+        "auditId": {"$ref": "#/$defs/bytes32"},
+        "impactLevel": {"$ref": "#/$defs/impactLevel"},
+        "status": {"$ref": "#/$defs/auditFindingStatus"},
+        "privilegeRelated": {"type": "boolean"},
+        "affectsUserFunds": {"type": "boolean"},
+        "subjectId": {"$ref": "#/$defs/bytes32"},
+        "powerId": {"$ref": "#/$defs/bytes32"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "titleHash": {"$ref": "#/$defs/bytes32"},
+        "notesHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "auditIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "active", "auditId", "relatedFindingId", "subjectId", "proofLevel", "detailsHash"],
+      "properties": {
+        "kind": {"$ref": "#/$defs/auditIssueKind"},
+        "active": {"type": "boolean"},
+        "auditId": {"$ref": "#/$defs/bytes32"},
+        "relatedFindingId": {"$ref": "#/$defs/bytes32"},
+        "subjectId": {"$ref": "#/$defs/bytes32"},
+        "proofLevel": {"$ref": "#/$defs/proofLevel"},
+        "detailsHash": {"$ref": "#/$defs/bytes32"}
+      }
+    },
+    "auditEvidenceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["auditEvidencePresent", "currentAuditApplies", "currentAuditExactMatch", "fullScopeAuditPresent", "privilegeGraphCoveragePresent", "proxyUpgradeCoveragePresent", "adminRoleCoveragePresent", "moduleCoveragePresent", "controlPathCoveragePresent", "staleOrDriftedAuditPresent", "unresolvedFindingsPresent", "disputedFindingsPresent", "acknowledgedFindingsPresent", "userInterpretationRisk", "auditCount", "applicableAuditCount", "partialScopeAuditCount", "unknownApplicabilityCount", "driftedAuditCount", "unresolvedFindingCount", "disputedFindingCount", "acknowledgedFindingCount", "staleAuditCount"],
+      "properties": {
+        "auditEvidencePresent": {"type": "boolean"},
+        "currentAuditApplies": {"type": "boolean"},
+        "currentAuditExactMatch": {"type": "boolean"},
+        "fullScopeAuditPresent": {"type": "boolean"},
+        "privilegeGraphCoveragePresent": {"type": "boolean"},
+        "proxyUpgradeCoveragePresent": {"type": "boolean"},
+        "adminRoleCoveragePresent": {"type": "boolean"},
+        "moduleCoveragePresent": {"type": "boolean"},
+        "controlPathCoveragePresent": {"type": "boolean"},
+        "staleOrDriftedAuditPresent": {"type": "boolean"},
+        "unresolvedFindingsPresent": {"type": "boolean"},
+        "disputedFindingsPresent": {"type": "boolean"},
+        "acknowledgedFindingsPresent": {"type": "boolean"},
+        "userInterpretationRisk": {"type": "boolean"},
+        "auditCount": {"type": "integer", "minimum": 0},
+        "applicableAuditCount": {"type": "integer", "minimum": 0},
+        "partialScopeAuditCount": {"type": "integer", "minimum": 0},
+        "unknownApplicabilityCount": {"type": "integer", "minimum": 0},
+        "driftedAuditCount": {"type": "integer", "minimum": 0},
+        "unresolvedFindingCount": {"type": "integer", "minimum": 0},
+        "disputedFindingCount": {"type": "integer", "minimum": 0},
+        "acknowledgedFindingCount": {"type": "integer", "minimum": 0},
+        "staleAuditCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "auditEvidenceExtension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audits", "auditApplicability", "auditFindings", "auditIssues", "auditEvidenceSummary"],
+      "properties": {
+        "audits": {"type": "array", "items": {"$ref": "#/$defs/auditRecord"}},
+        "auditApplicability": {"type": "array", "items": {"$ref": "#/$defs/auditApplicability"}},
+        "auditFindings": {"type": "array", "items": {"$ref": "#/$defs/auditFinding"}},
+        "auditIssues": {"type": "array", "items": {"$ref": "#/$defs/auditIssue"}},
+        "auditEvidenceSummary": {"$ref": "#/$defs/auditEvidenceSummary"}
+      }
+    },
+    "verifierReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["computedBy", "disclosurePassed", "constraintPassed", "manifestClosed", "unknownPrivilegeCount", "findings"],
+      "properties": {
+        "computedBy": {"type": "string", "minLength": 1},
+        "disclosurePassed": {"type": "boolean"},
+        "constraintPassed": {"type": "boolean"},
+        "manifestClosed": {"type": "boolean"},
+        "unknownPrivilegeCount": {"type": "integer", "minimum": 0},
+        "findings": {"type": "array", "items": {"$ref": "#/$defs/complianceFinding"}},
+        "auditEvidenceSummary": {"$ref": "#/$defs/auditEvidenceSummary"},
+        "auditIssues": {"type": "array", "items": {"$ref": "#/$defs/auditIssue"}}
+      }
+    }
+  }
+}

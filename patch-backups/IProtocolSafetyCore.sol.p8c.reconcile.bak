@@ -1,0 +1,199 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {SafetyTypes} from "src/libraries/SafetyTypes.sol";
+
+/// @title IProtocolSafetyCore
+/// @notice Canonical raw disclosure surface for protocol safety data.
+/// @dev This interface exposes declared facts about the implementation's current disclosure state.
+/// It does not, by itself, prove:
+/// - safety
+/// - completeness
+/// - honesty
+/// - live-system equivalence
+/// - audit applicability
+/// - absence of undeclared dependencies
+///
+/// @dev The core interface is canonical. Optional summary and audit-evidence interfaces are helper
+/// layers and must not override conflicting raw core disclosures.
+///
+/// @dev Core graph data is nodeId-centric. Address bindings are optional metadata or compatibility
+/// conveniences and are not the canonical identity model.
+///
+/// @dev Unless otherwise specified, index-based enumeration is insertion-ordered and stable after
+/// first insertion within the same live storage instance. This interface does not, by itself,
+/// guarantee that insertion ordering survives migrations, redeployments, or state import flows.
+interface IProtocolSafetyCore is IERC165 {
+    /// @notice Emitted when the current protocol metadata declaration is replaced.
+    /// @dev Metadata is a current-state declaration and is not, by itself, historical versioning.
+    event ProtocolMetadataUpdated(
+        string protocolName,
+        uint64 standardVersion,
+        uint256 chainId,
+        bytes32 manifestHash,
+        string manifestURI,
+        string metadataURI,
+        bool publisherAssertedManifestClosure
+    );
+
+    /// @notice Emitted when the current disclosure-scope declaration is replaced.
+    /// @dev Scope fields are commitments to coverage, exclusions, and assumptions. They do not
+    /// prove that the live system is complete or accurately described.
+    event DisclosureScopeUpdated(
+        bytes32 scopeHash,
+        bytes32 coveredComponentsHash,
+        bytes32 coveredAssetsHash,
+        bytes32 excludedDependenciesHash,
+        bytes32 assumptionsHash,
+        string scopeURI,
+        string coverageURI,
+        string exclusionsURI,
+        string assumptionsURI,
+        bool publisherAssertedCoveredComponentsCompleteness,
+        bool publisherAssertedCoveredAssetsCompleteness
+    );
+
+    /// @notice Emitted when a component declaration is created or updated.
+    /// @dev Component identity is keyed by component address. Canonical declaredAuthority identity remains
+    /// nodeId-based.
+    event ComponentSet(
+        address indexed component,
+        bytes32 indexed nodeId,
+        bool upgradeable,
+        address implementation,
+        bytes32 adminNodeId,
+        bytes32 metadataHash
+    );
+
+    /// @notice Emitted when a graph-node declaration is created or updated.
+    /// @dev nodeId is canonical. nodeAddress is optional metadata or a convenience binding.
+    event GraphNodeSet(
+        bytes32 indexed nodeId,
+        address indexed nodeAddress,
+        bytes32 metadataHash
+    );
+
+    /// @notice Emitted when a power descriptor is created or updated.
+    /// @dev A power descriptor is a declared capability, not proof that the implementation has
+    /// exhaustively disclosed every relevant capability in the live system.
+    event PowerDescriptorSet(
+        bytes32 indexed powerId,
+        SafetyTypes.PowerKind indexed powerKind,
+        address indexed target,
+        bytes32 targetNodeId,
+        bytes32 controllerNodeId,
+        SafetyTypes.ControllerType controllerType,
+        uint32 executionDelaySeconds,        SafetyTypes.EvidenceStrength evidenceStrength
+    );
+
+    /// @notice Emitted when a graph edge is created or updated.
+    /// @dev Edges describe declared control relationships in the disclosed graph. They do not, by
+    /// themselves, prove that undeclared or offchain control paths do not exist.
+    event GraphEdgeSet(
+        bytes32 indexed edgeId,
+        SafetyTypes.EdgeKind indexed edgeKind,
+        bytes32 indexed fromNodeId,
+        bytes32 toNodeId,
+        SafetyTypes.PowerKind powerKind,
+        bool direct,        SafetyTypes.EvidenceStrength evidenceStrength
+    );
+
+    /// @notice Emitted whenever the canonical raw disclosure state changes.
+    /// @dev The nonce is monotonically increasing for raw core disclosure mutations only.
+    /// It is intended for cache invalidation, state diffing, and freshness tracking.
+    event DisclosureStateUpdated(uint256 indexed disclosureNonce);
+
+    /// @notice Returns the current protocol metadata declaration.
+    /// @dev This is a current-state declaration, not a certification of truth or completeness.
+    function protocolMetadata() external view returns (SafetyTypes.ProtocolMetadata memory);
+
+    /// @notice Returns the current disclosure-scope declaration.
+    /// @dev Scope describes what is claimed to be covered, excluded, or assumed. It does not, by
+    /// itself, prove that the described boundary is complete or accurate.
+    function disclosureScope() external view returns (SafetyTypes.DisclosureScope memory);
+
+    /// @notice Returns the current raw disclosure-state nonce.
+    /// @dev This nonce changes only when canonical core disclosures change.
+    /// It is intended for cache invalidation and freshness tracking by downstream tooling.
+    function disclosureNonce() external view returns (uint256);
+
+    /// @notice Returns the number of declared components.
+    function componentCount() external view returns (uint256);
+
+    /// @notice Returns the component declared at `index`.
+    /// @dev Components are enumerated in insertion order.
+    /// Indices are stable after first insertion within the same live storage instance.
+    /// Consumers should prefer canonical identifiers over numeric indices when persisting references.
+    function componentAt(uint256 index) external view returns (SafetyTypes.Component memory);
+
+    /// @notice Returns the component declaration for `component`.
+    /// @dev Reverts if `component` has not been declared.
+    /// Missing-record behavior must not be inferred from zero-value structs.
+    function componentInfo(address component) external view returns (SafetyTypes.Component memory);
+
+    /// @notice Returns whether `component` has a declared component record.
+    function isRegisteredComponent(address component) external view returns (bool);
+
+    /// @notice Returns the number of declared graph nodes.
+    function nodeCount() external view returns (uint256);
+
+    /// @notice Returns the node declared at `index`.
+    /// @dev Nodes are enumerated in insertion order.
+    /// Indices are stable after first insertion within the same live storage instance.
+    /// nodeId is canonical; nodeAddress is optional metadata or a convenience binding only.
+    function nodeAt(uint256 index) external view returns (SafetyTypes.GraphNode memory);
+
+    /// @notice Returns the node declaration for `nodeId`.
+    /// @dev Reverts if `nodeId` has not been declared.
+    /// Missing-record behavior must not be inferred from zero-value structs.
+    function nodeInfo(bytes32 nodeId) external view returns (SafetyTypes.GraphNode memory);
+
+    /// @notice Returns whether `nodeId` has a declared node record.
+    function isRegisteredNode(bytes32 nodeId) external view returns (bool);
+
+    /// @notice Returns the canonical node identifier bound to `nodeAddress`.
+    /// @dev Returns `bytes32(0)` when `nodeAddress` is not bound to a declared node.
+    /// `bytes32(0)` means "no declared binding exists" and must not be interpreted as a safety
+    /// guarantee or as proof that no declaredAuthority relationship exists.
+    function nodeIdOfAddress(address nodeAddress) external view returns (bytes32);
+
+    /// @notice Returns whether `nodeAddress` is bound to a declared node.
+    /// @dev Address bindings are optional and are not sufficient to represent all declaredAuthority
+    /// structures, especially non-address-native or partly offchain authorities.
+    function hasNodeAddress(address nodeAddress) external view returns (bool);
+
+    /// @notice Returns the number of declared power descriptors.
+    function powerCount() external view returns (uint256);
+
+    /// @notice Returns the power declared at `index`.
+    /// @dev Powers are enumerated in insertion order.
+    /// Indices are stable after first insertion within the same live storage instance.
+    function powerAt(uint256 index) external view returns (SafetyTypes.PowerDescriptor memory);
+
+    /// @notice Returns the power declaration for `powerId`.
+    /// @dev Reverts if `powerId` has not been declared.
+    /// Missing-record behavior must not be inferred from zero-value structs.
+    function powerInfo(bytes32 powerId) external view returns (SafetyTypes.PowerDescriptor memory);
+
+    /// @notice Returns the number of declared powers targeting `target`.
+    function powerCountForTarget(address target) external view returns (uint256);
+
+    /// @notice Returns the power identifier declared at `index` for `target`.
+    /// @dev Power ids for a target are enumerated in insertion order within that target-specific
+    /// view. Indices are stable after first insertion within the same live storage instance.
+    function powerIdForTargetAt(address target, uint256 index) external view returns (bytes32);
+
+    /// @notice Returns the number of declared graph edges.
+    function edgeCount() external view returns (uint256);
+
+    /// @notice Returns the edge declared at `index`.
+    /// @dev Edges are enumerated in insertion order.
+    /// Indices are stable after first insertion within the same live storage instance.
+    function edgeAt(uint256 index) external view returns (SafetyTypes.GraphEdge memory);
+
+    /// @notice Returns the edge declaration for `edgeId`.
+    /// @dev Reverts if `edgeId` has not been declared.
+    /// Missing-record behavior must not be inferred from zero-value structs.
+    function edgeInfo(bytes32 edgeId) external view returns (SafetyTypes.GraphEdge memory);
+}

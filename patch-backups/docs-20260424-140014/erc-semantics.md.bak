@@ -1,0 +1,274 @@
+# ERC Semantics Draft
+
+## Status
+
+This document defines the intended normative semantics for the protocol safety disclosure standard implemented by this repository.
+
+This repository is a reference implementation.
+It is not, by itself, the standard.
+
+The canonical standard surface is:
+- `IProtocolSafetyCore`
+- optional `IProtocolSafetySummary`
+- optional `IProtocolSafetyAuditEvidence`
+
+`IProtocolSafety` is an aggregate compatibility interface and is not the canonical identity model.
+
+---
+
+## 1. Declared facts only
+
+Core disclosures are declared facts about the implementation's current disclosure state.
+
+They are not, by themselves:
+- proof of safety
+- proof of completeness
+- proof that all dependencies are included
+- proof that the live system matches the disclosure
+- proof that all offchain authorities are represented
+
+A malicious protocol can expose incomplete, misleading, or strategically partial disclosures while remaining syntactically compliant.
+
+Graph query helpers reflect the declared graph only unless independently reconstructed by an external verifier.
+
+---
+
+## 2. Canonical identity
+
+`nodeId` is the canonical identifier for an authority or system node.
+
+`nodeAddress` is optional metadata or a convenience binding.
+It is not the canonical identity.
+
+This is required because some authorities are not cleanly representable by a single address, including:
+- offchain committees
+- signer groups
+- legal custodians
+- hybrid onchain/offchain authorities
+- social or operational control structures
+
+Address absence does not imply invalidity.
+Address presence does not imply complete authority representation.
+
+---
+
+## 3. Zero-value and default-value semantics
+
+Zero values and empty values must not be interpreted as safe by default.
+
+### General rule
+Where a field may be unset, its zero or empty form means "unset / not declared / not bound / no stronger claim made" unless a stricter field-specific rule is provided.
+
+### Specific defaults
+- `bytes32(0)` for `nodeIdOfAddress(address)` means no declared node binding exists.
+- `address(0)` in a node or component field does not imply nonexistence; it may indicate no address binding or no implementation address is applicable.
+- empty strings for URIs do not imply absence of the underlying concept; they mean no URI is provided.
+- `false` booleans do not automatically imply safety; they only negate that specific claimed property.
+- numeric zero values for delay, threshold, limits, or counts must be interpreted literally, not optimistically.
+
+Integrators must never treat unset/default values as affirmative safety guarantees.
+
+---
+
+## 4. Lookup semantics
+
+Lookup behavior must be consistent and explicit.
+
+### Core lookup rules
+- `componentInfo(address)` reverts if the component is undeclared.
+- `nodeInfo(bytes32)` reverts if the node is undeclared.
+- `powerInfo(bytes32)` reverts if the power is undeclared.
+- `edgeInfo(bytes32)` reverts if the edge is undeclared.
+- `auditInfo(bytes32)` reverts if the audit is undeclared.
+- `auditApplicabilityInfo(bytes32)` reverts if applicability has not been declared.
+- `auditFindingInfo(bytes32)` reverts if the audit finding is undeclared.
+
+### Existence helpers
+- `isRegisteredComponent(address)` is the canonical existence helper for components.
+- `isRegisteredNode(bytes32)` is the canonical existence helper for nodes.
+- `isRegisteredAudit(bytes32)` is the canonical existence helper for audits.
+- `hasNodeAddress(address)` indicates whether an address binding exists.
+- `nodeIdOfAddress(address)` returns `bytes32(0)` when no binding exists.
+
+Missing-record behavior must not be inferred from zero-value structs.
+
+---
+
+## 5. Ordering semantics
+
+Where index-based enumeration exists, ordering is insertion order unless otherwise stated.
+
+This applies to:
+- components
+- nodes
+- powers
+- edges
+- audit records
+- audit findings
+
+Indices are stable after first insertion within the same live storage instance.
+
+### Findings and audit issues
+- `findingAt(index)` is deterministic for the current declared state.
+- finding indices are not stable identifiers across updates.
+- `auditIssueAt(index)` is deterministic for the current declared state.
+- audit issue indices are not stable identifiers across updates.
+
+Consumers must not persist finding or audit-issue identity by array index.
+
+---
+
+## 6. Mutability and append/update rules
+
+The standard distinguishes between stable enumerated records and recomputed derived records.
+
+### Stable declared records
+The following are declared records and are expected to remain addressable by their identifiers:
+- components
+- nodes
+- powers
+- edges
+- audit records
+- audit findings
+
+They may be updated in place by an implementation unless the implementation explicitly adopts append-only versioning.
+However, their identifiers remain canonical.
+
+### Derived records
+The following are derived state views and may be recomputed:
+- compliance findings
+- disclosure summaries
+- constraint summaries
+- review requirement summaries
+- proof level distributions
+- audit issues
+- audit evidence summaries
+
+Derived records are state-dependent and must not be treated as append-only historical logs unless separately versioned.
+
+### Metadata and scope
+`ProtocolMetadata` and `DisclosureScope` are replaceable current-state declarations unless separately versioned by an implementation.
+
+---
+
+## 7. Upgrade and migration boundary
+
+Insertion-order stability is guaranteed only within the same live storage instance unless an implementation explicitly preserves ordering across migrations.
+
+This standard does not automatically guarantee that insertion order survives:
+- implementation upgrades
+- registry migrations
+- redeployments
+- state imports
+- cross-chain redeployments
+
+If an implementation preserves order across migrations, it should document that separately.
+
+Integrators must prefer canonical IDs over numeric indices.
+
+---
+
+## 8. ProofLevel semantics
+
+`ProofLevel` expresses the strength of substantiation for a disclosed fact.
+
+### SELF_DECLARED
+The implementation asserts the fact, but the fact is not independently derived or externally verified by the standard surface itself.
+
+### ONCHAIN_DERIVED
+The fact is derived from observable onchain state or contract relationships, but not necessarily matched against exact source/build/deployment commitments.
+
+### EXACT_VERIFIED
+The fact is tied to an exact verification claim, such as verified source, exact deployment/build commitment, or another precise matching process defined by the implementation.
+
+### FORMALLY_PROVEN
+The fact is claimed to be supported by a formal proof or equivalent high-assurance method.
+This does not, by itself, imply full-system safety.
+
+`ProofLevel` is about substantiation strength of a fact, not overall protocol trustworthiness.
+
+---
+
+## 9. Declared findings vs independently verified findings
+
+A declared finding is a finding derived from the declared graph, declared scope, and other disclosed state inside the module.
+
+An independently verified finding is a finding produced by an external verifier that reconstructs or validates the live system independently of the module's self-disclosures.
+
+Declared findings are useful but remain downstream of the implementation's honesty and completeness.
+Independently verified findings have a different trust basis and must not be conflated with declared findings.
+
+---
+
+## 10. Summary semantics
+
+Summary outputs are helper views.
+
+They are not canonical truth.
+
+This applies to:
+- `DisclosureSummary`
+- `ConstraintSummary`
+- `ReviewRequirementSummary`
+- `ProofLevelDistribution`
+- `AuditEvidenceSummary`
+
+If a summary conflicts with raw disclosures, the raw disclosures are authoritative.
+
+Users and integrators must not mistake summaries for proof.
+
+---
+
+## 11. Audit evidence semantics
+
+Audit evidence is supplementary.
+
+Audit presence does not imply:
+- current applicability
+- full coverage
+- privilege graph completeness
+- safety
+- absence of unresolved issues
+
+Audit evidence may be stale, partial, drifted, disputed, or inapplicable to the live deployment.
+
+Applicability must be evaluated separately from existence.
+
+---
+
+## 12. Hash commitment semantics
+
+Every `*Hash` field is intended to be a commitment, but this repository has not yet finalized one universal serialization rule for all hashes.
+
+Until a canonical serialization rule is finalized, integrators must not assume that similarly named hash fields across independent implementations commit to identical encodings.
+
+Before ERC publication, the standard must define:
+- what each hash commits to
+- the canonical serialization format
+- whether the format is canonical JSON, ABI encoding, UTF-8 text, or another exact representation
+
+---
+
+## 13. Version semantics
+
+`standardVersion` refers to the claimed version of the disclosure standard implemented by the module.
+
+This field does not, by itself, define semantic compatibility across all extensions.
+
+Before publication, the standard must define:
+- version increment rules
+- compatibility expectations
+- whether extensions version independently
+- how breaking semantic changes are represented
+
+---
+
+## 14. Non-goals
+
+This standard does not:
+- certify safety
+- certify honesty
+- guarantee completeness
+- eliminate offchain trust
+- replace independent review
+- reduce all authority structures to addresses

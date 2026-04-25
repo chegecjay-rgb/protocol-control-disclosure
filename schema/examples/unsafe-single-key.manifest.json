@@ -1,0 +1,293 @@
+{
+  "protocolName": "Unsafe Single Key Example",
+  "standardVersion": 1,
+  "chainId": 1,
+  "module": "0x0000000000000000000000000000000000000B11",
+  "manifestHashStrategy": "keccak256-canonical-json-v1",
+  "manifestHash": "0x3131313131313131313131313131313131313131313131313131313131313131",
+  "manifestURI": "ipfs://unsafe-manifest",
+  "metadataURI": "ipfs://unsafe-metadata",
+  "manifestClosureClaimed": true,
+  "supportedInterfaces": {
+    "core": true,
+    "summary": true,
+    "auditEvidence": true,
+    "aggregate": true
+  },
+  "disclosureScope": {
+    "scopeHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "coveredComponentsHash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "coveredAssetsHash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "excludedDependenciesHash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "assumptionsHash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "scopeURI": "ipfs://scope",
+    "coverageURI": "ipfs://coverage",
+    "exclusionsURI": "ipfs://exclusions",
+    "assumptionsURI": "ipfs://assumptions",
+    "includesAllPrivilegeRelevantComponents": true,
+    "includesAllUserFacingAssets": true
+  },
+  "components": [
+    {
+      "address": "0x0000000000000000000000000000000000000300",
+      "nodeId": "0x0000000000000000000000000000000000000000000000000000000000000300",
+      "nodeType": "PROXY",
+      "inManifest": true,
+      "critical": true,
+      "custodyCritical": true,
+      "exactVerified": true,
+      "upgradeable": true,
+      "implementation": "0x0000000000000000000000000000000000000301",
+      "adminNodeId": "0x0000000000000000000000000000000000000000000000000000000000000f01",
+      "proofLevel": "EXACT_VERIFIED",
+      "metadataHash": "0x3232323232323232323232323232323232323232323232323232323232323232"
+    },
+    {
+      "address": "0x0000000000000000000000000000000000000301",
+      "nodeId": "0x0000000000000000000000000000000000000000000000000000000000000301",
+      "nodeType": "IMPLEMENTATION",
+      "inManifest": true,
+      "critical": true,
+      "custodyCritical": false,
+      "exactVerified": true,
+      "upgradeable": false,
+      "implementation": "0x0000000000000000000000000000000000000000",
+      "adminNodeId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "proofLevel": "EXACT_VERIFIED",
+      "metadataHash": "0x3333333333333333333333333333333333333333333333333333333333333333"
+    }
+  ],
+  "nodes": [
+    {
+      "nodeId": "0x0000000000000000000000000000000000000000000000000000000000000f01",
+      "nodeAddress": "0x0000000000000000000000000000000000000F01",
+      "nodeType": "OTHER",
+      "inManifest": true,
+      "critical": false,
+      "authority": true,
+      "proofLevel": "SELF_DECLARED",
+      "metadataHash": "0x3434343434343434343434343434343434343434343434343434343434343434"
+    }
+  ],
+  "powers": [
+    {
+      "powerId": "0x3535353535353535353535353535353535353535353535353535353535353535",
+      "powerKind": "UPGRADE",
+      "enabled": true,
+      "target": "0x0000000000000000000000000000000000000300",
+      "targetNodeId": "0x0000000000000000000000000000000000000000000000000000000000000300",
+      "controllerType": "EOA",
+      "controllerNodeId": "0x0000000000000000000000000000000000000000000000000000000000000f01",
+      "threshold": 1,
+      "controllerCount": 1,
+      "executionDelaySeconds": 0,
+      "emergencyBypass": false,
+      "scope": "CONTRACT",
+      "impactLevel": "CRITICAL",
+      "maxImpactValue": 0,
+      "canTouchUserFunds": false,
+      "rateLimit": 0,
+      "rateLimitWindowSeconds": 0,
+      "revocable": true,
+      "proofLevel": "SELF_DECLARED",
+      "scopeHash": "0x3636363636363636363636363636363636363636363636363636363636363636",
+      "notesHash": "0x3737373737373737373737373737373737373737373737373737373737373737"
+    },
+    {
+      "powerId": "0x3838383838383838383838383838383838383838383838383838383838383838",
+      "powerKind": "SWEEP_FUNDS",
+      "enabled": true,
+      "target": "0x0000000000000000000000000000000000000300",
+      "targetNodeId": "0x0000000000000000000000000000000000000000000000000000000000000300",
+      "controllerType": "EOA",
+      "controllerNodeId": "0x0000000000000000000000000000000000000000000000000000000000000f01",
+      "threshold": 1,
+      "controllerCount": 1,
+      "executionDelaySeconds": 0,
+      "emergencyBypass": false,
+      "scope": "CUSTODY_POOL",
+      "impactLevel": "UNBOUNDED",
+      "maxImpactValue": 1000000000,
+      "canTouchUserFunds": true,
+      "rateLimit": 0,
+      "rateLimitWindowSeconds": 0,
+      "revocable": true,
+      "proofLevel": "SELF_DECLARED",
+      "scopeHash": "0x3939393939393939393939393939393939393939393939393939393939393939",
+      "notesHash": "0x3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "0x3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b",
+      "edgeKind": "CAN_UPGRADE",
+      "powerKind": "UPGRADE",
+      "fromNodeId": "0x0000000000000000000000000000000000000000000000000000000000000f01",
+      "toNodeId": "0x0000000000000000000000000000000000000000000000000000000000000300",
+      "direct": true,
+      "transitive": false,
+      "canBypassDelay": false,
+      "touchesUserFunds": false,
+      "proofLevel": "SELF_DECLARED",
+      "notesHash": "0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"
+    }
+  ],
+  "findings": [
+    {
+      "kind": "SINGLE_EOA_CRITICAL_CONTROL",
+      "category": "CONSTRAINT",
+      "active": true,
+      "subjectId": "0x0000000000000000000000000000000000000000000000000000000000000f01",
+      "relatedId": "0x0000000000000000000000000000000000000000000000000000000000000300",
+      "referenceId": "0x3535353535353535353535353535353535353535353535353535353535353535",
+      "proofLevel": "SELF_DECLARED",
+      "detailsHash": "0x3737373737373737373737373737373737373737373737373737373737373737"
+    },
+    {
+      "kind": "ZERO_DELAY_CUSTODY_UPGRADE",
+      "category": "CONSTRAINT",
+      "active": true,
+      "subjectId": "0x0000000000000000000000000000000000000000000000000000000000000300",
+      "relatedId": "0x0000000000000000000000000000000000000000000000000000000000000f01",
+      "referenceId": "0x3535353535353535353535353535353535353535353535353535353535353535",
+      "proofLevel": "SELF_DECLARED",
+      "detailsHash": "0x3737373737373737373737373737373737373737373737373737373737373737"
+    }
+  ],
+  "verificationReferences": [
+    {
+      "subjectId": "0x0000000000000000000000000000000000000000000000000000000000000300",
+      "subjectAddress": "0x0000000000000000000000000000000000000300",
+      "exactVerified": true,
+      "sourceURI": "ipfs://unsafe-source",
+      "buildInfoURI": "ipfs://unsafe-build",
+      "metadataURI": "ipfs://unsafe-meta"
+    }
+  ],
+  "summaryExtension": {
+    "disclosureSummary": {
+      "interfaceSupported": true,
+      "manifestClaimedClosed": true,
+      "manifestClosed": true,
+      "allNodesInManifest": true,
+      "allPowersHaveKnownControllers": true,
+      "allEdgesKnown": true,
+      "exactVerifiedCriticalComponents": true,
+      "componentCount": 2,
+      "nodeCount": 1,
+      "edgeCount": 1,
+      "powerCount": 2,
+      "unknownPrivilegeCount": 0
+    },
+    "constraintSummary": {
+      "noSingleKeyCriticalControl": false,
+      "noZeroDelayCustodyUpgrade": false,
+      "noUndisclosedDelegatecall": true,
+      "noUndisclosedCustodian": true,
+      "noUndisclosedBridgeAdapter": true,
+      "criticalPowersDelayed": false,
+      "userFundsIsolated": false,
+      "criticalPowerCount": 2,
+      "delayedCriticalPowerCount": 0
+    },
+    "reviewRequirementSummary": {
+      "privilegeGraphReviewRequired": true,
+      "proxyUpgradeReviewRequired": true,
+      "adminRoleReviewRequired": false,
+      "moduleReviewRequired": false,
+      "controlPathReviewRequired": true
+    },
+    "proofLevelDistribution": {
+      "selfDeclared": 4,
+      "onchainDerived": 1,
+      "exactVerified": 4,
+      "formallyProven": 0
+    }
+  },
+  "auditEvidenceExtension": {
+    "audits": [
+      {
+        "auditId": "0x3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+        "auditorName": "Recognized Auditor",
+        "reportURI": "ipfs://unsafe-audit-report",
+        "reportHash": "0x3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e",
+        "reportMetadataHash": "0x3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+        "coveredManifestHash": "0x3131313131313131313131313131313131313131313131313131313131313131",
+        "coveredBuildHash": "0x4040404040404040404040404040404040404040404040404040404040404040",
+        "coveredCommitHash": "0x4141414141414141414141414141414141414141414141414141414141414141",
+        "coveredDeploymentHash": "0x4242424242424242424242424242424242424242424242424242424242424242",
+        "issuedAt": 1700000000,
+        "scope": "FULL",
+        "publicReport": true,
+        "coversPrivilegeGraph": true,
+        "coversProxyUpgradePaths": true,
+        "coversAdminRoles": true,
+        "coversModules": true,
+        "coversControlPaths": true,
+        "coversOracleConfig": false,
+        "coversRuntimeConfig": true,
+        "proofLevel": "EXACT_VERIFIED",
+        "notesHash": "0x4343434343434343434343434343434343434343434343434343434343434343"
+      }
+    ],
+    "auditApplicability": [
+      {
+        "auditId": "0x3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+        "status": "MATCHES_LIVE_DEPLOYMENT",
+        "liveMatchesManifest": true,
+        "liveMatchesBuild": true,
+        "liveMatchesDeployment": true,
+        "liveMatchesRuntimeConfig": true,
+        "liveMatchesRoleConfig": true,
+        "liveMatchesModules": true,
+        "liveMatchesProxyTopology": true,
+        "liveMatchesOracleConfig": true,
+        "liveMatchesControllers": true,
+        "stale": false,
+        "proofLevel": "ONCHAIN_DERIVED",
+        "notesHash": "0x4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    ],
+    "auditFindings": [
+      {
+        "findingId": "0x4545454545454545454545454545454545454545454545454545454545454545",
+        "auditId": "0x3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d",
+        "impactLevel": "MEDIUM",
+        "status": "RESOLVED",
+        "privilegeRelated": true,
+        "affectsUserFunds": false,
+        "subjectId": "0x0000000000000000000000000000000000000000000000000000000000000300",
+        "powerId": "0x3535353535353535353535353535353535353535353535353535353535353535",
+        "proofLevel": "EXACT_VERIFIED",
+        "titleHash": "0x4646464646464646464646464646464646464646464646464646464646464646",
+        "notesHash": "0x4747474747474747474747474747474747474747474747474747474747474747"
+      }
+    ],
+    "auditIssues": [],
+    "auditEvidenceSummary": {
+      "auditEvidencePresent": true,
+      "currentAuditApplies": true,
+      "currentAuditExactMatch": true,
+      "fullScopeAuditPresent": true,
+      "privilegeGraphCoveragePresent": true,
+      "proxyUpgradeCoveragePresent": true,
+      "adminRoleCoveragePresent": true,
+      "moduleCoveragePresent": true,
+      "controlPathCoveragePresent": true,
+      "staleOrDriftedAuditPresent": false,
+      "unresolvedFindingsPresent": false,
+      "disputedFindingsPresent": false,
+      "acknowledgedFindingsPresent": false,
+      "userInterpretationRisk": false,
+      "auditCount": 1,
+      "applicableAuditCount": 1,
+      "partialScopeAuditCount": 0,
+      "unknownApplicabilityCount": 0,
+      "driftedAuditCount": 0,
+      "unresolvedFindingCount": 0,
+      "disputedFindingCount": 0,
+      "acknowledgedFindingCount": 0,
+      "staleAuditCount": 0
+    }
+  }
+}

@@ -1,0 +1,169 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
+import {SafetyTypes} from "src/libraries/SafetyTypes.sol";
+
+library SafetyCapabilities {
+    uint8 internal constant POWER_KIND_COUNT = 17;
+    uint8 internal constant FAILURE_KIND_COUNT = 12;
+    uint8 internal constant AUDIT_ISSUE_KIND_COUNT = 15;
+    uint8 internal constant AUDIT_FINDING_STATUS_COUNT = 6;
+
+    uint256 internal constant CAP_CORE_DISCLOSURE = 1 << 0;
+    uint256 internal constant CAP_SUMMARY_EXTENSION = 1 << 1;
+    uint256 internal constant CAP_AUDIT_EVIDENCE_EXTENSION = 1 << 2;
+    uint256 internal constant CAP_AGGREGATE_INTERFACE = 1 << 3;
+    uint256 internal constant CAP_DISCLOSURE_NONCE = 1 << 4;
+    uint256 internal constant CAP_AUDIT_EVIDENCE_NONCE = 1 << 5;
+    uint256 internal constant CAP_CLAIMS_VERIFIABILITY_EXTENSION = 1 << 6;
+    uint256 internal constant CAP_CLAIMS_NONCE = 1 << 7;
+
+    function flag(SafetyTypes.PowerKind powerKind) internal pure returns (uint256) {
+        return uint256(1) << uint8(powerKind);
+    }
+
+    function hasFlag(uint256 flags, SafetyTypes.PowerKind powerKind) internal pure returns (bool) {
+        return flags & flag(powerKind) != 0;
+    }
+
+    function setFlag(
+        uint256 flags,
+        SafetyTypes.PowerKind powerKind,
+        bool enabled
+    ) internal pure returns (uint256) {
+        uint256 powerFlag = flag(powerKind);
+        if (enabled) {
+            return flags | powerFlag;
+        }
+
+        return flags & ~powerFlag;
+    }
+
+    function nodeIdFromAddress(address nodeAddress) internal pure returns (bytes32) {
+        return bytes32(uint256(uint160(nodeAddress)));
+    }
+
+    function isCriticalPower(SafetyTypes.PowerKind powerKind) internal pure returns (bool) {
+        return powerKind == SafetyTypes.PowerKind.UPGRADE
+            || powerKind == SafetyTypes.PowerKind.SWEEP_FUNDS
+            || powerKind == SafetyTypes.PowerKind.MOVE_RESERVES
+            || powerKind == SafetyTypes.PowerKind.CHANGE_ORACLE
+            || powerKind == SafetyTypes.PowerKind.CHANGE_RISK_PARAMS
+            || powerKind == SafetyTypes.PowerKind.ARBITRARY_CALL
+            || powerKind == SafetyTypes.PowerKind.INSTALL_MODULE
+            || powerKind == SafetyTypes.PowerKind.DELEGATECALL_EXTENSION
+            || powerKind == SafetyTypes.PowerKind.BYPASS_DELAY;
+    }
+
+    function isCriticalPowerDescriptor(
+        SafetyTypes.PowerDescriptor memory powerData
+    ) internal pure returns (bool) {
+        return isCriticalPower(powerData.powerKind)
+            || powerData.canTouchUserFunds
+            || powerData.impactLevel == SafetyTypes.ImpactLevel.CRITICAL
+            || powerData.impactLevel == SafetyTypes.ImpactLevel.UNBOUNDED;
+    }
+
+    function findingCategory(
+        SafetyTypes.DiagnosticKind kind
+    ) internal pure returns (SafetyTypes.FindingCategory) {
+        if (
+            kind == SafetyTypes.DiagnosticKind.MANIFEST_CLOSURE_VIOLATION
+                || kind == SafetyTypes.DiagnosticKind.UNKNOWN_PRIVILEGED_PATH
+                || kind == SafetyTypes.DiagnosticKind.OMITTED_RESERVE_CUSTODIAN
+                || kind == SafetyTypes.DiagnosticKind.OMITTED_BRIDGE_ADAPTER
+                || kind == SafetyTypes.DiagnosticKind.HIDDEN_MODULE_WITH_EXECUTION_RIGHTS
+                || kind == SafetyTypes.DiagnosticKind.OMITTED_FALLBACK_HANDLER
+                || kind == SafetyTypes.DiagnosticKind.OMITTED_GUARD
+                || kind == SafetyTypes.DiagnosticKind.UNDISCLOSED_ADMIN_CONTROLLER
+        ) {
+            return SafetyTypes.FindingCategory.MANIFEST_CLOSURE;
+        }
+
+        if (kind == SafetyTypes.DiagnosticKind.MISSING_EXACT_VERIFICATION_CRITICAL_COMPONENT) {
+            return SafetyTypes.FindingCategory.VERIFICATION;
+        }
+
+        if (
+            kind == SafetyTypes.DiagnosticKind.SINGLE_EOA_CRITICAL_CONTROL
+                || kind == SafetyTypes.DiagnosticKind.ZERO_DELAY_CUSTODY_UPGRADE
+                || kind == SafetyTypes.DiagnosticKind.UNDISCLOSED_DELEGATECALL_EXTENSION
+        ) {
+            return SafetyTypes.FindingCategory.CONSTRAINT;
+        }
+
+        return SafetyTypes.FindingCategory.DISCLOSURE;
+    }
+
+    function edgeMatchesPower(
+        SafetyTypes.EdgeKind edgeKind,
+        SafetyTypes.PowerKind powerKind
+    ) internal pure returns (bool) {
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_UPGRADE) {
+            return powerKind == SafetyTypes.PowerKind.UPGRADE;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_PAUSE) {
+            return powerKind == SafetyTypes.PowerKind.PAUSE_DEPOSITS
+                || powerKind == SafetyTypes.PowerKind.PAUSE_WITHDRAWALS;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_MINT) {
+            return powerKind == SafetyTypes.PowerKind.MINT;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_BURN) {
+            return powerKind == SafetyTypes.PowerKind.BURN;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_BLACKLIST) {
+            return powerKind == SafetyTypes.PowerKind.BLACKLIST;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_SWEEP_FUNDS) {
+            return powerKind == SafetyTypes.PowerKind.SWEEP_FUNDS;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_MOVE_RESERVES) {
+            return powerKind == SafetyTypes.PowerKind.MOVE_RESERVES;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_CHANGE_FEES) {
+            return powerKind == SafetyTypes.PowerKind.CHANGE_FEES;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_CHANGE_ORACLE) {
+            return powerKind == SafetyTypes.PowerKind.CHANGE_ORACLE;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_CHANGE_RISK_PARAMS) {
+            return powerKind == SafetyTypes.PowerKind.CHANGE_RISK_PARAMS;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_ARBITRARY_CALL) {
+            return powerKind == SafetyTypes.PowerKind.ARBITRARY_CALL;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_GRANT_ROLE) {
+            return powerKind == SafetyTypes.PowerKind.GRANT_ROLE;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_REVOKE_ROLE) {
+            return powerKind == SafetyTypes.PowerKind.REVOKE_ROLE;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_INSTALL_MODULE) {
+            return powerKind == SafetyTypes.PowerKind.INSTALL_MODULE;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_DELEGATECALL) {
+            return powerKind == SafetyTypes.PowerKind.DELEGATECALL_EXTENSION;
+        }
+        if (edgeKind == SafetyTypes.EdgeKind.CAN_BYPASS_DELAY) {
+            return powerKind == SafetyTypes.PowerKind.BYPASS_DELAY;
+        }
+
+        return false;
+    }
+
+    function protocolSafetyCapabilityFlags() internal pure returns (uint256) {
+        return CAP_CORE_DISCLOSURE
+            | CAP_SUMMARY_EXTENSION
+            | CAP_AUDIT_EVIDENCE_EXTENSION
+            | CAP_AGGREGATE_INTERFACE
+            | CAP_DISCLOSURE_NONCE
+            | CAP_AUDIT_EVIDENCE_NONCE
+            | CAP_CLAIMS_VERIFIABILITY_EXTENSION
+            | CAP_CLAIMS_NONCE;
+    }
+
+    function hasCapabilities(uint256 flags, uint256 capabilityMask) internal pure returns (bool) {
+        return (flags & capabilityMask) == capabilityMask;
+    }
+}

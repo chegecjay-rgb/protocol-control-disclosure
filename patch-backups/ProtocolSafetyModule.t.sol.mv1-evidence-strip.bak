@@ -1,0 +1,871 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {Test} from "forge-std/Test.sol";
+import {IProtocolSafety} from "src/interfaces/IProtocolSafety.sol";
+import {IProtocolSafetyAuditEvidence} from "src/interfaces/IProtocolSafetyAuditEvidence.sol";
+import {IProtocolSafetyCapabilities} from "src/interfaces/IProtocolSafetyCapabilities.sol";
+import {IProtocolSafetyClaims} from "src/interfaces/IProtocolSafetyClaims.sol";
+import {IProtocolSafetyCore} from "src/interfaces/IProtocolSafetyCore.sol";
+import {IProtocolSafetySummary} from "src/interfaces/IProtocolSafetySummary.sol";
+import {IProtocolSafetyProfiles} from "src/interfaces/IProtocolSafetyProfiles.sol";
+import {ProtocolSafetyModule} from "src/core/ProtocolSafetyModule.sol";
+import {SafetyCapabilities} from "src/libraries/SafetyCapabilities.sol";
+import {SafetyClaimsTypes} from "src/libraries/SafetyClaimsTypes.sol";
+import {SafetyProfileTypes} from "src/libraries/SafetyProfileTypes.sol";
+import {SafetyTypes} from "src/libraries/SafetyTypes.sol";
+
+contract ProtocolSafetyModuleTest is Test {
+    ProtocolSafetyModule internal module;
+
+    address internal constant SAFE = address(0x1001);
+    address internal constant TIMELOCK = address(0x1002);
+    address internal constant VAULT_PROXY = address(0x1003);
+    address internal constant VAULT_IMPL = address(0x1004);
+
+    bytes32 internal constant AUDIT_ID = keccak256("audit-id");
+    bytes32 internal constant AUDIT_FINDING_ID = keccak256("audit-finding-id");
+    bytes32 internal constant CLAIM_ID = keccak256("claim-id");
+    bytes32 internal constant ASSUMPTION_ID = keccak256("assumption-id");
+    bytes32 internal constant CLAIM_LINK_ID = keccak256("claim-link-id");
+
+    function setUp() external {
+        module = new ProtocolSafetyModule(
+            address(this),
+            "Safety Prototype",
+            1,
+            keccak256("manifest"),
+            "ipfs://manifest",
+            "ipfs://metadata",
+            true
+        );
+    }
+
+    function test_supportsSplitInterfaceDetection() external view {
+        assertTrue(module.supportsInterface(type(IProtocolSafetyCore).interfaceId));
+        assertTrue(module.supportsInterface(type(IProtocolSafetySummary).interfaceId));
+        assertTrue(module.supportsInterface(type(IProtocolSafetyAuditEvidence).interfaceId));
+        assertTrue(module.supportsInterface(type(IProtocolSafety).interfaceId));
+        assertTrue(module.supportsInterface(type(IERC165).interfaceId));
+    }
+
+    function test_registersStructuredPowerGraphAndAuditData() external {
+        _registerBaseStack(true);
+
+        bytes32 powerId = keccak256("upgrade-power");
+        bytes32 edgeId = keccak256("timelock-upgrade-edge");
+
+        module.setPowerDescriptor(_upgradePower(powerId, 72 hours, SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED));
+        module.setGraphEdge(_upgradeEdge(edgeId, TIMELOCK, VAULT_PROXY, SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED));
+        module.setAuditRecord(_auditRecord(AUDIT_ID, SafetyTypes.AuditScope.FULL, SafetyTypes.EvidenceStrength.EXACT_VERIFIED));
+        module.setAuditContext(
+            _auditContext(
+                AUDIT_ID,
+                SafetyTypes.AuditContextStatus.MATCHES_LIVE_DEPLOYMENT,
+                SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED,
+                false,
+                true
+            )
+        );
+        module.setAuditFinding(
+            _auditFinding(
+                AUDIT_FINDING_ID,
+                AUDIT_ID,
+                SafetyTypes.AuditFindingStatus.RESOLVED,
+                SafetyTypes.EvidenceStrength.EXACT_VERIFIED
+            )
+        );
+
+        SafetyTypes.PowerDescriptor memory powerData = module.powerInfo(powerId);
+        SafetyTypes.GraphEdge memory edgeData = module.edgeInfo(edgeId);
+        SafetyTypes.GraphNode memory timelockNode = module.nodeInfo(_nodeId(TIMELOCK));
+        SafetyTypes.AuditRecord memory auditData = module.auditInfo(AUDIT_ID);
+        SafetyTypes.AuditContext memory applicability = module.auditContextInfo(AUDIT_ID);
+        SafetyTypes.AuditFindingRecord memory findingData = module.auditFindingInfo(AUDIT_FINDING_ID);
+        SafetyTypes.AuditEvidenceSummary memory auditSummary = module.auditEvidenceSummary();
+
+        assertEq(uint8(powerData.powerKind), uint8(SafetyTypes.PowerKind.UPGRADE));
+        assertEq(powerData.controllerNodeId, _nodeId(SAFE));
+        assertEq(edgeData.fromNodeId, _nodeId(TIMELOCK));
+        assertEq(timelockNode.nodeAddress, TIMELOCK);
+        assertEq(auditData.reportHash, keccak256("report"));
+        assertEq(applicability.auditId, AUDIT_ID);
+        assertEq(findingData.subjectId, _nodeId(VAULT_PROXY));
+        assertTrue(auditSummary.auditEvidencePresent);
+        assertTrue(auditSummary.currentAuditApplies);
+        assertTrue(auditSummary.currentAuditExactMatch);
+        assertFalse(auditSummary.userInterpretationRisk);
+        assertEq(module.auditFindingCountByStatus(SafetyTypes.AuditFindingStatus.RESOLVED), 1);
+    }
+
+    function disabled_test_evidenceStrengthDistributionRequiresProfileSemantics() external {
+        SafetyTypes.EvidenceStrengthDistribution memory distribution = module.evidenceStrengthDistribution();
+        assertEq(distribution.onchainDerived, 0);
+        assertEq(distribution.selfDeclared, 0);
+    }
+
+    function test_disclosureConstraintAndAuditSummariesRemainSeparate() external {
+        _registerBaseStack(false);
+        module.setPowerDescriptor(_upgradePower(keccak256("upgrade-power"), 2 days, SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED));
+        module.setAuditRecord(_auditRecord(AUDIT_ID, SafetyTypes.AuditScope.PARTIAL, SafetyTypes.EvidenceStrength.SELF_DECLARED));
+        module.setAuditContext(
+            _auditContext(
+                AUDIT_ID,
+                SafetyTypes.AuditContextStatus.DRIFTED,
+                SafetyTypes.EvidenceStrength.SELF_DECLARED,
+                false,
+                false
+            )
+        );
+
+        SafetyTypes.DisclosureSummary memory disclosure = module.disclosureSummary();
+        SafetyTypes.ConstraintSummary memory constraints = module.constraintSummary();
+        SafetyTypes.ReviewCueSummary memory review = module.reviewCueSummary();
+        SafetyTypes.AuditEvidenceSummary memory auditSummary = module.auditEvidenceSummary();
+
+        assertTrue(disclosure.manifestClosed);
+        assertTrue(constraints.noSingleKeySensitiveControl);
+        assertTrue(constraints.sensitivePowersDelayed);
+        assertTrue(review.proxyUpgradeReviewRequired);
+        assertTrue(review.controlPathReviewRequired);
+        assertTrue(auditSummary.auditEvidencePresent);
+        assertFalse(auditSummary.currentAuditExactMatch);
+        assertTrue(auditSummary.userInterpretationRisk);
+        assertEq(auditSummary.partialScopeAuditCount, 1);
+        assertEq(auditSummary.driftedAuditCount, 1);
+        assertTrue(module.hasAuditIssue(SafetyTypes.AuditIssueKind.AUDIT_PARTIAL_SCOPE));
+        assertTrue(module.hasAuditIssue(SafetyTypes.AuditIssueKind.AUDIT_DRIFT_DETECTED));
+    }
+
+    function test_disclosureScopeFeedsClosureState() external {
+        _registerBaseStack(true);
+
+        SafetyTypes.DisclosureScope memory scopeData;
+        scopeData.scopeHash = keccak256("scope");
+        scopeData.coveredComponentsHash = keccak256("components");
+        scopeData.coveredAssetsHash = keccak256("assets");
+        scopeData.excludedDependenciesHash = keccak256("dependencies");
+        scopeData.assumptionsHash = keccak256("assumptions");
+        scopeData.scopeURI = "ipfs://scope";
+        scopeData.coverageURI = "ipfs://coverage";
+        scopeData.exclusionsURI = "ipfs://exclusions";
+        scopeData.assumptionsURI = "ipfs://assumptions";
+        scopeData.publisherAssertedCoveredComponentsCompleteness = false;
+        scopeData.publisherAssertedCoveredAssetsCompleteness = true;
+        module.setDisclosureScope(scopeData);
+
+        SafetyTypes.DisclosureSummary memory disclosure = module.disclosureSummary();
+        SafetyTypes.DisclosureScope memory storedScope = module.disclosureScope();
+
+        assertEq(storedScope.scopeHash, scopeData.scopeHash);
+        assertFalse(disclosure.manifestClosed);
+        assertTrue(module.hasFinding(SafetyTypes.DiagnosticKind.MANIFEST_CLOSURE_VIOLATION));
+    }
+
+    function test_unboundAddressReturnsZeroNodeIdAndNoBinding() external view {
+        address unknown = address(0xBEEF);
+
+        assertEq(module.nodeIdOfAddress(unknown), bytes32(0));
+        assertFalse(module.hasNodeAddress(unknown));
+        assertFalse(module.isRegisteredNode(unknown));
+    }
+
+    function test_undeclaredLookupsRevert() external {
+        address unknownComponent = address(0xBEEF);
+        address unknownNodeAddress = address(0xCAFE);
+
+        bytes32 missingNodeId = keccak256("missing-node");
+        bytes32 missingPowerId = keccak256("missing-power");
+        bytes32 missingEdgeId = keccak256("missing-edge");
+        bytes32 missingAuditId = keccak256("missing-audit");
+        bytes32 missingAuditFindingId = keccak256("missing-audit-finding");
+
+        vm.expectRevert();
+        module.componentInfo(unknownComponent);
+
+        vm.expectRevert();
+        module.nodeInfo(missingNodeId);
+
+        vm.expectRevert();
+        module.nodeInfo(unknownNodeAddress);
+
+        vm.expectRevert();
+        module.powerInfo(missingPowerId);
+
+        vm.expectRevert();
+        module.edgeInfo(missingEdgeId);
+
+        vm.expectRevert();
+        module.auditInfo(missingAuditId);
+
+        module.setAuditRecord(
+            _auditRecord(AUDIT_ID, SafetyTypes.AuditScope.FULL, SafetyTypes.EvidenceStrength.SELF_DECLARED)
+        );
+
+        vm.expectRevert();
+        module.auditContextInfo(AUDIT_ID);
+
+        vm.expectRevert();
+        module.auditFindingInfo(missingAuditFindingId);
+    }
+
+    function test_findingsAreDerivedCurrentStateViewsNotPersistentIdentities() external {
+        _registerBaseStack(false);
+
+        assertFalse(
+            module.hasFinding(SafetyTypes.DiagnosticKind.MISSING_EXACT_VERIFICATION_SENSITIVE_COMPONENT)
+        );
+        assertEq(
+            module.findingCountByKind(SafetyTypes.DiagnosticKind.MISSING_EXACT_VERIFICATION_SENSITIVE_COMPONENT),
+            0
+        );
+        assertEq(module.findingCount(), 0);
+
+        vm.expectRevert();
+        module.findingAt(0);
+
+        _registerBaseStack(true);
+
+        assertFalse(
+            module.hasFinding(SafetyTypes.DiagnosticKind.MISSING_EXACT_VERIFICATION_SENSITIVE_COMPONENT)
+        );
+        assertEq(
+            module.findingCountByKind(SafetyTypes.DiagnosticKind.MISSING_EXACT_VERIFICATION_SENSITIVE_COMPONENT),
+            0
+        );
+        assertEq(module.findingCount(), 0);
+    }
+
+    function test_summaryViewsRemainHelpersAndDoNotMutateRawDisclosures() external {
+        _registerBaseStack(false);
+
+        bytes32 powerId = keccak256("summary-upgrade-power");
+        bytes32 edgeId = keccak256("summary-upgrade-edge");
+
+        module.setPowerDescriptor(_upgradePower(powerId, 2 days, SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED));
+        module.setGraphEdge(_upgradeEdge(edgeId, TIMELOCK, VAULT_PROXY, SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED));
+        module.setAuditRecord(_auditRecord(AUDIT_ID, SafetyTypes.AuditScope.PARTIAL, SafetyTypes.EvidenceStrength.SELF_DECLARED));
+        module.setAuditContext(
+            _auditContext(
+                AUDIT_ID,
+                SafetyTypes.AuditContextStatus.DRIFTED,
+                SafetyTypes.EvidenceStrength.SELF_DECLARED,
+                false,
+                false
+            )
+        );
+
+        SafetyTypes.Component memory componentBefore = module.componentInfo(VAULT_PROXY);
+        SafetyTypes.PowerDescriptor memory powerBefore = module.powerInfo(powerId);
+        SafetyTypes.GraphEdge memory edgeBefore = module.edgeInfo(edgeId);
+        SafetyTypes.AuditRecord memory auditBefore = module.auditInfo(AUDIT_ID);
+
+        SafetyTypes.DisclosureSummary memory disclosure = module.disclosureSummary();
+        SafetyTypes.ConstraintSummary memory constraints = module.constraintSummary();
+        SafetyTypes.ReviewCueSummary memory review = module.reviewCueSummary();
+        SafetyTypes.EvidenceStrengthDistribution memory distribution = module.evidenceStrengthDistribution();
+        SafetyTypes.AuditEvidenceSummary memory auditSummary = module.auditEvidenceSummary();
+
+        SafetyTypes.Component memory componentAfter = module.componentInfo(VAULT_PROXY);
+        SafetyTypes.PowerDescriptor memory powerAfter = module.powerInfo(powerId);
+        SafetyTypes.GraphEdge memory edgeAfter = module.edgeInfo(edgeId);
+        SafetyTypes.AuditRecord memory auditAfter = module.auditInfo(AUDIT_ID);
+
+        assertTrue(constraints.sensitivePowersDelayed);
+        assertTrue(review.proxyUpgradeReviewRequired);
+        assertTrue(auditSummary.auditEvidencePresent);
+        assertTrue(auditSummary.userInterpretationRisk);
+        // Helper distribution semantics are optional/non-authoritative in the narrowed core.
+
+        assertEq(componentAfter.component, componentBefore.component);
+
+        assertEq(powerAfter.powerId, powerBefore.powerId);
+        assertEq(powerAfter.executionDelaySeconds, powerBefore.executionDelaySeconds);
+
+        assertEq(edgeAfter.edgeId, edgeBefore.edgeId);
+        assertEq(edgeAfter.fromNodeId, edgeBefore.fromNodeId);
+
+        assertEq(auditAfter.auditId, auditBefore.auditId);
+        assertEq(auditAfter.reportHash, auditBefore.reportHash);
+    }
+
+    function test_componentEnumerationPreservesInsertionOrderInCurrentState() external {
+        _registerBaseStack(true);
+
+        address reserveCustodian = address(0xC0FFEE);
+
+        assertEq(module.componentCount(), 2);
+
+        SafetyTypes.Component memory first = module.componentAt(0);
+        SafetyTypes.Component memory second = module.componentAt(1);
+
+        assertEq(first.component, VAULT_PROXY);
+        assertEq(second.component, VAULT_IMPL);
+
+        module.setComponent(
+            _component(
+                reserveCustodian,
+                SafetyTypes.NodeType.CUSTODIAN,
+                true,
+                true,
+                true,
+                false,
+                false,
+                address(0),
+                _nodeId(SAFE),
+                SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED,
+                keccak256("reserve-custodian")
+            )
+        );
+
+        assertEq(module.componentCount(), 3);
+
+        first = module.componentAt(0);
+        second = module.componentAt(1);
+        SafetyTypes.Component memory third = module.componentAt(2);
+
+        assertEq(first.component, VAULT_PROXY);
+        assertEq(second.component, VAULT_IMPL);
+        assertEq(third.component, reserveCustodian);
+    }
+
+    function test_disclosureNonceStartsAtOneAndBumpsOnRawDisclosureMutations() external {
+        assertEq(module.disclosureNonce(), 1);
+
+        _registerBaseStack(true);
+        assertEq(module.disclosureNonce(), 5);
+
+        SafetyTypes.DisclosureScope memory scopeData;
+        scopeData.scopeHash = keccak256("scope-nonce");
+        scopeData.coveredComponentsHash = keccak256("components-nonce");
+        scopeData.coveredAssetsHash = keccak256("assets-nonce");
+        scopeData.excludedDependenciesHash = keccak256("dependencies-nonce");
+        scopeData.assumptionsHash = keccak256("assumptions-nonce");
+        scopeData.scopeURI = "ipfs://scope-nonce";
+        scopeData.coverageURI = "ipfs://coverage-nonce";
+        scopeData.exclusionsURI = "ipfs://exclusions-nonce";
+        scopeData.assumptionsURI = "ipfs://assumptions-nonce";
+        scopeData.publisherAssertedCoveredComponentsCompleteness = true;
+        scopeData.publisherAssertedCoveredAssetsCompleteness = true;
+        module.setDisclosureScope(scopeData);
+        assertEq(module.disclosureNonce(), 6);
+
+        module.setPowerDescriptor(
+            _upgradePower(
+                keccak256("upgrade-power-extra"),
+                2 days,
+                SafetyTypes.EvidenceStrength.EXACT_VERIFIED
+            )
+        );
+        assertEq(module.disclosureNonce(), 7);
+
+        module.setGraphEdge(
+            _upgradeEdge(
+                keccak256("edge-upgrade-safe-timelock"),
+                SAFE,
+                TIMELOCK,
+                SafetyTypes.EvidenceStrength.EXACT_VERIFIED
+            )
+        );
+        assertEq(module.disclosureNonce(), 8);
+
+        module.setProtocolMetadata(
+            "Safety Prototype v2",
+            keccak256("manifest-v2"),
+            "ipfs://manifest-v2",
+            "ipfs://metadata-v2",
+            true
+        );
+        assertEq(module.disclosureNonce(), 9);
+    }
+
+    function test_disclosureNonceDoesNotBumpOnAuditExtensionWrites() external {
+        assertEq(module.disclosureNonce(), 1);
+
+        module.setAuditRecord(
+            _auditRecord(
+                AUDIT_ID,
+                SafetyTypes.AuditScope.FULL,
+                SafetyTypes.EvidenceStrength.EXACT_VERIFIED
+            )
+        );
+        assertEq(module.disclosureNonce(), 1);
+
+        module.setAuditContext(
+            _auditContext(
+                AUDIT_ID,
+                SafetyTypes.AuditContextStatus.MATCHES_LIVE_DEPLOYMENT,
+                SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED,
+                false,
+                true
+            )
+        );
+        assertEq(module.disclosureNonce(), 1);
+
+        module.setAuditFinding(
+            _auditFinding(
+                AUDIT_FINDING_ID,
+                AUDIT_ID,
+                SafetyTypes.AuditFindingStatus.RESOLVED,
+                SafetyTypes.EvidenceStrength.SELF_DECLARED
+            )
+        );
+        assertEq(module.disclosureNonce(), 1);
+    }
+
+    function test_auditEvidenceNonceStartsAtZeroAndBumpsOnAuditExtensionWrites() external {
+        assertEq(module.auditEvidenceNonce(), 0);
+
+        module.setAuditRecord(
+            _auditRecord(
+                AUDIT_ID,
+                SafetyTypes.AuditScope.FULL,
+                SafetyTypes.EvidenceStrength.EXACT_VERIFIED
+            )
+        );
+        assertEq(module.auditEvidenceNonce(), 1);
+
+        module.setAuditContext(
+            _auditContext(
+                AUDIT_ID,
+                SafetyTypes.AuditContextStatus.MATCHES_LIVE_DEPLOYMENT,
+                SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED,
+                false,
+                true
+            )
+        );
+        assertEq(module.auditEvidenceNonce(), 2);
+
+        module.setAuditFinding(
+            _auditFinding(
+                AUDIT_FINDING_ID,
+                AUDIT_ID,
+                SafetyTypes.AuditFindingStatus.RESOLVED,
+                SafetyTypes.EvidenceStrength.SELF_DECLARED
+            )
+        );
+        assertEq(module.auditEvidenceNonce(), 3);
+    }
+
+    function test_auditEvidenceNonceDoesNotBumpOnRawDisclosureMutations() external {
+        assertEq(module.auditEvidenceNonce(), 0);
+
+        _registerBaseStack(true);
+        assertEq(module.auditEvidenceNonce(), 0);
+
+        SafetyTypes.DisclosureScope memory scopeData;
+        scopeData.scopeHash = keccak256("scope-audit-nonce");
+        scopeData.coveredComponentsHash = keccak256("components-audit-nonce");
+        scopeData.coveredAssetsHash = keccak256("assets-audit-nonce");
+        scopeData.excludedDependenciesHash = keccak256("dependencies-audit-nonce");
+        scopeData.assumptionsHash = keccak256("assumptions-audit-nonce");
+        scopeData.scopeURI = "ipfs://scope-audit-nonce";
+        scopeData.coverageURI = "ipfs://coverage-audit-nonce";
+        scopeData.exclusionsURI = "ipfs://exclusions-audit-nonce";
+        scopeData.assumptionsURI = "ipfs://assumptions-audit-nonce";
+        scopeData.publisherAssertedCoveredComponentsCompleteness = true;
+        scopeData.publisherAssertedCoveredAssetsCompleteness = true;
+        module.setDisclosureScope(scopeData);
+        assertEq(module.auditEvidenceNonce(), 0);
+
+        module.setProtocolMetadata(
+            "Safety Prototype v3",
+            keccak256("manifest-v3"),
+            "ipfs://manifest-v3",
+            "ipfs://metadata-v3",
+            true
+        );
+        assertEq(module.auditEvidenceNonce(), 0);
+    }
+
+    function test_capabilityDiscoverySurfaceExposesSupportedFlags() external view {
+        uint256 flags = module.capabilityFlags();
+
+        assertTrue((flags & SafetyCapabilities.CAP_CORE_DISCLOSURE) != 0);
+        assertTrue((flags & SafetyCapabilities.CAP_SUMMARY_EXTENSION) != 0);
+        assertTrue((flags & SafetyCapabilities.CAP_AUDIT_EVIDENCE_EXTENSION) != 0);
+        assertTrue((flags & SafetyCapabilities.CAP_AGGREGATE_INTERFACE) != 0);
+        assertTrue((flags & SafetyCapabilities.CAP_DISCLOSURE_NONCE) != 0);
+        assertTrue((flags & SafetyCapabilities.CAP_AUDIT_EVIDENCE_NONCE) != 0);
+        assertTrue((flags & SafetyCapabilities.CAP_CLAIMS_VERIFIABILITY_EXTENSION) != 0);
+        assertTrue((flags & SafetyCapabilities.CAP_CLAIMS_NONCE) != 0);
+
+        assertTrue(
+            module.supportsCapabilities(
+                SafetyCapabilities.CAP_CORE_DISCLOSURE
+                    | SafetyCapabilities.CAP_SUMMARY_EXTENSION
+                    | SafetyCapabilities.CAP_DISCLOSURE_NONCE
+                    | SafetyCapabilities.CAP_CLAIMS_VERIFIABILITY_EXTENSION
+            )
+        );
+    }
+
+    function test_supportsCapabilityDiscoveryInterface() external view {
+        assertTrue(IERC165(address(module)).supportsInterface(type(IProtocolSafetyCapabilities).interfaceId));
+    }
+
+    function test_claimsNonceStartsAtZeroAndBumpsOnClaimsExtensionWrites() external {
+        assertEq(module.claimsNonce(), 0);
+
+        module.setClaimRecord(
+            SafetyClaimsTypes.ClaimRecord({
+                claimId: CLAIM_ID,
+                subjectId: _nodeId(TIMELOCK),
+                subjectType: SafetyClaimsTypes.ClaimSubjectType.NODE,
+                claimType: SafetyClaimsTypes.ClaimType.CONTROL_CONSTRAINT,
+                status: SafetyClaimsTypes.ClaimStatus.ACTIVE,
+                verifiability: SafetyClaimsTypes.VerifiabilityClass.DIRECTLY_VERIFIABLE,
+                statementHash: keccak256("upgrades require timelock"),
+                statementURI: "ipfs://claim-upgrades-require-timelock",
+                scopeHash: keccak256("claims-scope-upgrades"),
+                supersedesClaimId: bytes32(0)
+            })
+        );
+        assertEq(module.claimsNonce(), 1);
+
+        module.setAssumptionRecord(
+            SafetyClaimsTypes.AssumptionRecord({
+                assumptionId: ASSUMPTION_ID,
+                claimId: CLAIM_ID,
+                kind: SafetyClaimsTypes.AssumptionKind.MULTISIG_BEHAVIOR,
+                status: SafetyClaimsTypes.ClaimStatus.ACTIVE,
+                statementHash: keccak256("timelock operators submit queued operations honestly"),
+                statementURI: "ipfs://assumption-timelock-operators"
+            })
+        );
+        assertEq(module.claimsNonce(), 2);
+
+        module.setClaimEvidenceLink(
+            SafetyClaimsTypes.ClaimEvidenceLink({
+                linkId: CLAIM_LINK_ID,
+                claimId: CLAIM_ID,
+                kind: SafetyClaimsTypes.EvidenceLinkKind.CORE_DISCLOSURE_REFERENCE,
+                referenceId: keccak256("upgrade-power"),
+                artifactHash: keccak256("core-disclosure-reference"),
+                artifactURI: "ipfs://evidence-upgrade-power"
+            })
+        );
+        assertEq(module.claimsNonce(), 3);
+    }
+
+    function test_claimsExtensionStoresVerifiabilityAssumptionsAndEvidence() external {
+        module.setClaimRecord(
+            SafetyClaimsTypes.ClaimRecord({
+                claimId: CLAIM_ID,
+                subjectId: _nodeId(SAFE),
+                subjectType: SafetyClaimsTypes.ClaimSubjectType.NODE,
+                claimType: SafetyClaimsTypes.ClaimType.UPGRADE_PROCESS,
+                status: SafetyClaimsTypes.ClaimStatus.ACTIVE,
+                verifiability: SafetyClaimsTypes.VerifiabilityClass.CONDITIONALLY_VERIFIABLE,
+                statementHash: keccak256("safe can only upgrade through timelock path"),
+                statementURI: "ipfs://claim-safe-timelock-upgrade-path",
+                scopeHash: keccak256("claims-scope-safe-upgrades"),
+                supersedesClaimId: bytes32(0)
+            })
+        );
+
+        module.setAssumptionRecord(
+            SafetyClaimsTypes.AssumptionRecord({
+                assumptionId: ASSUMPTION_ID,
+                claimId: CLAIM_ID,
+                kind: SafetyClaimsTypes.AssumptionKind.GOVERNANCE_PROCESS,
+                status: SafetyClaimsTypes.ClaimStatus.ACTIVE,
+                statementHash: keccak256("governance follows declared process"),
+                statementURI: "ipfs://assumption-governance-process"
+            })
+        );
+
+        module.setClaimEvidenceLink(
+            SafetyClaimsTypes.ClaimEvidenceLink({
+                linkId: CLAIM_LINK_ID,
+                claimId: CLAIM_ID,
+                kind: SafetyClaimsTypes.EvidenceLinkKind.AUDIT_RECORD_REFERENCE,
+                referenceId: AUDIT_ID,
+                artifactHash: keccak256("audit-record-reference"),
+                artifactURI: "ipfs://evidence-audit-record"
+            })
+        );
+
+        SafetyClaimsTypes.ClaimRecord memory claimData = module.claimRecord(CLAIM_ID);
+        assertEq(claimData.claimId, CLAIM_ID);
+        assertEq(uint256(claimData.subjectType), uint256(SafetyClaimsTypes.ClaimSubjectType.NODE));
+        assertEq(uint256(claimData.claimType), uint256(SafetyClaimsTypes.ClaimType.UPGRADE_PROCESS));
+        assertEq(
+            uint256(claimData.verifiability),
+            uint256(SafetyClaimsTypes.VerifiabilityClass.CONDITIONALLY_VERIFIABLE)
+        );
+        assertEq(claimData.scopeHash, keccak256("claims-scope-safe-upgrades"));
+
+        SafetyClaimsTypes.AssumptionRecord memory assumptionData = module.assumptionRecord(ASSUMPTION_ID);
+        assertEq(assumptionData.assumptionId, ASSUMPTION_ID);
+        assertEq(assumptionData.claimId, CLAIM_ID);
+        assertEq(uint256(assumptionData.kind), uint256(SafetyClaimsTypes.AssumptionKind.GOVERNANCE_PROCESS));
+
+        SafetyClaimsTypes.ClaimEvidenceLink memory linkData = module.claimEvidenceLink(CLAIM_LINK_ID);
+        assertEq(linkData.linkId, CLAIM_LINK_ID);
+        assertEq(linkData.claimId, CLAIM_ID);
+        assertEq(
+            uint256(linkData.kind),
+            uint256(SafetyClaimsTypes.EvidenceLinkKind.AUDIT_RECORD_REFERENCE)
+        );
+        assertEq(linkData.referenceId, AUDIT_ID);
+
+        assertEq(module.claimCount(), 1);
+        assertEq(module.claimIdAt(0), CLAIM_ID);
+        assertEq(module.assumptionCount(), 1);
+        assertEq(module.assumptionIdAt(0), ASSUMPTION_ID);
+        assertEq(module.claimAssumptionCount(CLAIM_ID), 1);
+        assertEq(module.claimAssumptionIdAt(CLAIM_ID, 0), ASSUMPTION_ID);
+        assertEq(module.claimEvidenceLinkCount(), 1);
+        assertEq(module.claimEvidenceLinkIdAt(0), CLAIM_LINK_ID);
+        assertEq(module.claimEvidenceLinkCountForClaim(CLAIM_ID), 1);
+        assertEq(module.claimEvidenceLinkIdAtForClaim(CLAIM_ID, 0), CLAIM_LINK_ID);
+    }
+
+    function test_supportsClaimsExtensionInterface() external view {
+        assertTrue(IERC165(address(module)).supportsInterface(type(IProtocolSafetyClaims).interfaceId));
+    }
+
+    function _registerBaseStack(bool _declaredExactVerified) internal {
+
+        module.setGraphNode(
+            _node(
+                SAFE,
+                SafetyTypes.NodeType.MULTISIG,
+                true,
+                false,
+                true,
+                SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED,
+                keccak256("safe-node")
+            )
+        );
+        module.setGraphNode(
+            _node(
+                TIMELOCK,
+                SafetyTypes.NodeType.TIMELOCK,
+                true,
+                false,
+                true,
+                SafetyTypes.EvidenceStrength.ONCHAIN_DERIVED,
+                keccak256("timelock-node")
+            )
+        );
+        module.setComponent(
+            _component(
+                VAULT_PROXY,
+                SafetyTypes.NodeType.PROXY,
+                true,
+                true,
+                true,
+                _declaredExactVerified,
+                true,
+                VAULT_IMPL,
+                _nodeId(TIMELOCK),
+                _declaredExactVerified ? SafetyTypes.EvidenceStrength.EXACT_VERIFIED : SafetyTypes.EvidenceStrength.SELF_DECLARED,
+                keccak256("vault-proxy")
+            )
+        );
+        module.setComponent(
+            _component(
+                VAULT_IMPL,
+                SafetyTypes.NodeType.IMPLEMENTATION,
+                true,
+                true,
+                false,
+                _declaredExactVerified,
+                false,
+                address(0),
+                bytes32(0),
+                _declaredExactVerified ? SafetyTypes.EvidenceStrength.EXACT_VERIFIED : SafetyTypes.EvidenceStrength.SELF_DECLARED,
+                keccak256("vault-impl")
+            )
+        );
+    }
+
+    function _upgradePower(
+        bytes32 powerId,
+        uint32 executionDelaySeconds,
+        SafetyTypes.EvidenceStrength _evidenceStrength
+    ) internal pure returns (SafetyTypes.PowerDescriptor memory powerData) {
+
+        powerData.powerId = powerId;
+        powerData.powerKind = SafetyTypes.PowerKind.UPGRADE;
+        powerData.enabled = true;
+        powerData.target = VAULT_PROXY;
+        powerData.targetNodeId = _nodeId(VAULT_PROXY);
+        powerData.controllerType = SafetyTypes.ControllerType.MULTISIG;
+        powerData.controllerNodeId = _nodeId(SAFE);
+        powerData.threshold = 3;
+        powerData.controllerCount = 5;
+        powerData.executionDelaySeconds = executionDelaySeconds;
+        powerData.scope = SafetyTypes.Scope.CONTRACT;
+        powerData.revocable = true;
+        powerData.scopeHash = keccak256("scope-upgrade");
+        powerData.notesHash = keccak256("notes-upgrade");
+    }
+
+    function _upgradeEdge(
+        bytes32 edgeId,
+        address from,
+        address to,
+        SafetyTypes.EvidenceStrength _evidenceStrength
+    ) internal pure returns (SafetyTypes.GraphEdge memory edgeData) {
+
+        edgeData.edgeId = edgeId;
+        edgeData.edgeKind = SafetyTypes.EdgeKind.CAN_UPGRADE;
+        edgeData.powerKind = SafetyTypes.PowerKind.UPGRADE;
+        edgeData.fromNodeId = _nodeId(from);
+        edgeData.toNodeId = _nodeId(to);
+        edgeData.direct = true;
+        edgeData.notesHash = keccak256("edge-upgrade");
+    }
+
+    function _auditRecord(
+        bytes32 auditId,
+        SafetyTypes.AuditScope scope,
+        SafetyTypes.EvidenceStrength _evidenceStrength
+    ) internal pure returns (SafetyTypes.AuditRecord memory auditData) {
+
+        auditData.auditId = auditId;
+        auditData.auditorName = "Example Auditor";
+        auditData.reportURI = "ipfs://audit-report";
+        auditData.reportHash = keccak256("report");
+        auditData.reportMetadataHash = keccak256("report-meta");
+        auditData.coveredManifestHash = keccak256("manifest");
+        auditData.coveredBuildHash = keccak256("build");
+        auditData.coveredCommitHash = keccak256("commit");
+        auditData.coveredDeploymentHash = keccak256("deployment");
+        auditData.issuedAt = 1_700_000_000;
+        auditData.scope = scope;
+        auditData.publicReport = true;
+        auditData.coversPrivilegeGraph = true;
+        auditData.coversProxyUpgradePaths = true;
+        auditData.coversAdminRoles = true;
+        auditData.coversModules = true;
+        auditData.coversControlPaths = true;
+        auditData.coversOracleConfig = true;
+        auditData.coversRuntimeConfig = true;
+        auditData.notesHash = keccak256("audit-notes");
+    }
+
+    function _auditContext(
+        bytes32 auditId,
+        SafetyTypes.AuditContextStatus status,
+        SafetyTypes.EvidenceStrength _evidenceStrength,
+        bool stale,
+        bool exactMatch
+    ) internal pure returns (SafetyTypes.AuditContext memory applicability) {
+
+        applicability.auditId = auditId;
+        applicability.status = status;
+        applicability.liveMatchesManifest = exactMatch;
+        applicability.liveMatchesBuild = exactMatch;
+        applicability.liveMatchesDeployment = exactMatch;
+        applicability.liveMatchesRuntimeConfig = exactMatch;
+        applicability.liveMatchesRoleConfig = exactMatch;
+        applicability.liveMatchesModules = exactMatch;
+        applicability.liveMatchesProxyTopology = exactMatch;
+        applicability.liveMatchesOracleConfig = exactMatch;
+        applicability.liveMatchesControllers = exactMatch;
+        applicability.stale = stale;
+        applicability.notesHash = keccak256("audit-applicability");
+    }
+
+    function _auditFinding(
+        bytes32 findingId,
+        bytes32 auditId,
+        SafetyTypes.AuditFindingStatus status,
+        SafetyTypes.EvidenceStrength _evidenceStrength
+    ) internal pure returns (SafetyTypes.AuditFindingRecord memory findingData) {
+
+        findingData.findingId = findingId;
+        findingData.auditId = auditId;
+        findingData.status = status;
+        findingData.privilegeRelated = true;
+        findingData.affectsUserFunds = false;
+        findingData.subjectId = _nodeId(VAULT_PROXY);
+        findingData.powerId = keccak256("upgrade-power");
+        findingData.titleHash = keccak256("finding-title");
+        findingData.notesHash = keccak256("finding-notes");
+    }
+
+    function _component(
+        address component,
+        SafetyTypes.NodeType nodeType,
+        bool inManifest,
+        bool _declaredReviewSensitive,
+        bool _declaredFundsSensitive,
+        bool _declaredExactVerified,
+        bool upgradeable,
+        address implementation,
+        bytes32 adminNodeId,
+        SafetyTypes.EvidenceStrength _evidenceStrength,
+        bytes32 metadataHash
+    ) internal pure returns (SafetyTypes.Component memory) {
+        _declaredReviewSensitive;
+        _declaredFundsSensitive;
+        _declaredExactVerified;
+        _evidenceStrength;
+
+        return SafetyTypes.Component({
+            component: component,
+            nodeId: _nodeId(component),
+            nodeType: nodeType,
+            inManifest: inManifest,
+            upgradeable: upgradeable,
+            implementation: implementation,
+            adminNodeId: adminNodeId,
+            metadataHash: metadataHash
+        });
+    }
+
+    function _node(
+        address nodeAddress,
+        SafetyTypes.NodeType nodeType,
+        bool inManifest,
+        bool _declaredReviewSensitive,
+        bool declaredAuthority,
+        SafetyTypes.EvidenceStrength _evidenceStrength,
+        bytes32 metadataHash
+    ) internal pure returns (SafetyTypes.GraphNode memory) {
+        _declaredReviewSensitive;
+        declaredAuthority;
+        _evidenceStrength;
+
+        return SafetyTypes.GraphNode({
+            nodeId: _nodeId(nodeAddress),
+            nodeType: nodeType,
+            nodeAddress: nodeAddress,
+            inManifest: inManifest,
+            metadataHash: metadataHash
+        });
+    }
+
+    function _nodeId(address value) internal pure returns (bytes32) {
+        return bytes32(uint256(uint160(value)));
+    }
+
+    function test_profilesNonceStartsAtZeroAndBumpsOnProfileExtensionWrites() external {
+        assertEq(module.profilesNonce(), 0);
+
+        _registerBaseStack(true);
+
+        module.setComponentProfile(
+            SafetyProfileTypes.ComponentProfile({
+                component: VAULT_PROXY,
+                declaredReviewSensitive: true,
+                declaredFundsSensitive: true,
+                declaredExactVerified: true,
+                evidenceStrength: SafetyTypes.EvidenceStrength.EXACT_VERIFIED
+            })
+        );
+
+        assertEq(module.profilesNonce(), 1);
+    }
+
+    function test_supportsProfilesExtensionInterface() external view {
+        assertTrue(module.supportsInterface(type(IProtocolSafetyProfiles).interfaceId));
+    }
+
+}

@@ -1,0 +1,181 @@
+# Compliance Model
+
+This repository separates protocol safety disclosure into distinct layers.
+
+The model is intentionally designed so that:
+- raw disclosures remain canonical
+- summaries remain helper views
+- audit evidence remains supplementary
+- no self-declared output is treated as proof of safety
+
+This repository is a reference implementation of that model.
+It is not, by itself, an independently verifying system.
+
+## 1. Canonical Structural Disclosure Layer
+
+The canonical structural layer is the raw disclosed graph and related records.
+
+It is derived from declared:
+- protocol metadata
+- disclosure scope
+- components
+- graph nodes
+- graph edges
+- structured power descriptors
+- compliance findings
+
+This layer is the source of truth for downstream consumers.
+If a summary conflicts with the raw disclosures, the raw disclosures win.
+
+### What this layer means
+
+This layer exposes declared facts about the implementation's current disclosure state.
+
+It does not, by itself, prove:
+- that the disclosure is complete
+- that all relevant dependencies were honestly included
+- that all offchain authority is represented
+- that the live deployment exactly matches the disclosure
+- that the protocol is safe
+
+### Canonical identity
+
+The canonical identity model is `nodeId`-based.
+
+Address bindings are optional compatibility metadata.
+They are useful, but they are not sufficient to represent every authority structure.
+
+That matters because some real control structures may include:
+- signer groups
+- operational committees
+- legal custodians
+- hybrid onchain/offchain governance
+- social or organizational control paths
+
+## 2. Structural Evaluation Layer
+
+Structural evaluation is computed from the declared graph and the current scope.
+
+This layer exists to help tooling interpret the disclosure.
+It is still downstream of the implementation's honesty and completeness.
+
+### Disclosure track
+
+The disclosure track asks whether enough declared structure exists for tooling to reason about privileged control.
+
+Typical questions:
+- Is the interface present?
+- Is scope declared?
+- Are components declared?
+- Are graph nodes declared?
+- Are edges and privileged paths declared?
+- Is the manifest claimed closed?
+- Are critical components marked exact-verified?
+- Are there unknown privileged paths inside the declared model?
+
+### Constraint track
+
+The constraint track asks whether the declared powers are credibly limited inside the declared model.
+
+Typical questions:
+- Are dangerous powers delayed?
+- Is critical control distributed?
+- Can user funds be touched?
+- Is there zero-delay custody-critical upgrade power?
+- Are module, delegatecall, guard, and fallback-related paths declared?
+
+### Important boundary
+
+These tracks evaluate the declared model.
+
+They do not prove that:
+- undeclared control does not exist
+- omitted dependencies do not matter
+- offchain or social control paths are absent
+- the implementation's self-description is complete
+
+## 3. Summary Layer
+
+The summary layer exists for wallets, explorers, scanners, and user-facing tools.
+
+It includes helper views such as:
+- disclosure summaries
+- constraint summaries
+- review requirement summaries
+- proof-level distributions
+
+These summaries are useful, but they are not canonical truth.
+
+They must not be treated as:
+- a trust score
+- a safety certificate
+- stronger than the underlying raw disclosures
+- a substitute for inspecting raw graph facts
+
+If a summary conflicts with the raw graph, the raw graph is authoritative.
+
+## 4. Audit Evidence Layer
+
+Audit evidence is intentionally separate from the structural profile.
+
+This layer asks:
+- Does audit evidence exist?
+- Who issued it?
+- What target did it claim to cover?
+- Does it still apply to the live deployment?
+- Was scope full or partial?
+- Were privilege graph, proxy, admin, module, and control-path reviews included?
+- Are findings unresolved, disputed, acknowledged, stale, or unknown?
+
+### Why the separation matters
+
+A protocol can be:
+- structurally constrained but unaudited
+- structurally unsafe but audited
+- well disclosed but incompletely audited
+- audited but drifted away from the audited target
+
+Those are materially different states.
+The model does not collapse them into one boolean.
+
+### Audit boundary
+
+Audit evidence is supplementary.
+
+It does not, by itself, prove:
+- present-day applicability
+- full-system coverage
+- privilege-graph completeness
+- safety
+- absence of unresolved issues
+
+## 5. What Counts As Compliance
+
+A protocol can claim support for the interface.
+
+It cannot honestly self-issue a safety classification merely by implementing the surface.
+
+A serious verifier should compute at least:
+- disclosure profile
+- constraint profile
+- currently derived structural findings
+- audit evidence profile
+- audit issues
+- declared-vs-verified distinctions where available
+
+## 6. Declared vs Independently Verified Results
+
+This distinction is fundamental.
+
+A declared finding is derived from the protocol's own disclosed graph and current declared state.
+
+An independently verified finding is produced by a verifier that reconstructs or validates the live system independently.
+
+These are not the same trust basis.
+
+The standard becomes materially stronger when paired with:
+- exact source/deployment verification
+- live proxy/admin discovery
+- independent graph reconstruction
+- external verifier reports
+

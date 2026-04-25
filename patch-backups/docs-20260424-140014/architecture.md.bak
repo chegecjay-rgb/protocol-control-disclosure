@@ -1,0 +1,56 @@
+# Architecture
+
+The prototype is centered on a single reference module, `ProtocolSafetyModule`, which exposes typed metadata for:
+- protocol metadata
+- in-scope components
+- privilege graph nodes
+- privilege graph edges
+- structured privileged powers
+- computed structural findings
+- separate audit-evidence records, applicability, and audit issues
+
+## Primary Trust Ordering
+
+The architecture keeps a strict trust order:
+1. live structural facts about deployed code and control surfaces
+2. declared metadata and machine-readable summaries derived from those facts
+3. audit evidence and applicability as secondary evidence
+
+The audit layer extends the existing system. It does not replace the structural model and it does not override structural failures.
+
+## Onchain Model
+
+### Structural surface
+- `Component` reports deployed addresses, verification state, upgradeability, implementation, and admin controller.
+- `GraphNode` reports authorities and system actors that belong in the manifest closure.
+- `GraphEdge` reports control relationships and privilege edges.
+- `PowerDescriptor` reports who can exercise a power, how quickly they can act, and how much damage they can do.
+
+### Derived structural summaries
+- `DisclosureSummary` reports manifest closure, controller visibility, edge visibility, and exact-verification coverage.
+- `ConstraintSummary` reports whether critical powers are delayed, whether user funds are isolated, and whether obvious structural failures exist.
+- `ComplianceFinding` exposes machine-readable structural failures.
+
+### Audit-evidence surface
+- `AuditRecord` captures audit facts: auditor identity, report reference, covered manifest/build/deployment, scope, and coverage areas.
+- `AuditApplicability` captures whether the live deployment still matches the audited target and whether drift or staleness is present.
+- `AuditFindingRecord` captures per-finding status such as resolved, unresolved, disputed, acknowledged, stale, or unknown.
+- `AuditEvidenceSummary` aggregates audit evidence without presenting it as a safety badge.
+- `AuditIssue` captures machine-readable reasons an audit should not be read as a strong positive signal.
+
+## Offchain Model
+
+The JSON schema mirrors the onchain surface so a manifest can carry the same typed information offchain. Example manifests include:
+- a constrained protocol with applicable audit evidence
+- an unsafe single-key protocol that is still structurally dangerous despite audit evidence
+- an incomplete manifest that fails closure and has no audit evidence
+
+## Intended Verifier Workflow
+
+1. Enumerate components and the authority graph from live deployment data.
+2. Compare live data to the declared manifest.
+3. Recompute disclosure, constraint, and forbidden-pattern findings independently.
+4. Compare audit targets and applicability data against the live system.
+5. Present structural findings and audit evidence as distinct outputs.
+
+That last separation is deliberate. Structural findings answer what the system can do. Audit evidence answers whether third-party review exists and whether it still applies.

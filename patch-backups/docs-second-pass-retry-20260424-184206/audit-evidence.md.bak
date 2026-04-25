@@ -1,0 +1,50 @@
+# Audit Evidence Layer
+
+Layer 9 is an extension of the existing system, not a new trust base.
+
+## What the layer captures
+
+### Audit facts
+- whether audit evidence exists
+- who performed it
+- where the report is published
+- a report hash and metadata hash
+- the manifest, build, commit, and deployment target hashes the audit claims to cover
+- whether the audit was full-scope or partial
+- whether privilege graph, proxy, admin-role, module, and control-path review were included
+
+### Audit validity
+- whether the live deployment still matches the audited target
+- whether drift exists in build, deployment, runtime config, role config, modules, proxy topology, oracle config, or controllers
+- whether the audit should be treated as stale
+
+### Audit findings
+- whether findings are resolved, unresolved, disputed, acknowledged, stale, or unknown
+
+## What the layer intentionally does not say
+
+It does not say:
+- audited therefore safe
+- audit present therefore structural failures are cleared
+- full-scope audit therefore no hidden privileged path exists
+
+## Honest user-facing phrasing
+
+Reasonable phrasing:
+- Audit evidence present
+- Audit evidence present; live deployment matches audited target within declared scope
+- Audit evidence present but drifted or partial
+
+Unreasonable phrasing:
+- Safe because audited
+- Certified safe
+
+## Display guidance for wallets and explorers
+
+Show structural risk and audit evidence side by side.
+
+Example:
+- Structural profile: critical single-key upgrade path, zero delay, user funds reachable
+- Audit profile: third-party report exists, current deployment matches audited target
+
+That presentation is honest because it preserves the fact that audit evidence does not erase the structural danger.
