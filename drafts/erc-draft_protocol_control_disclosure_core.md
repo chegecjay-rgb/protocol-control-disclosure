@@ -3,7 +3,7 @@ eip: XXXX
 title: Protocol Control Disclosure Core
 description: A canonical machine-readable interface for raw protocol control disclosure covering metadata, scope commitments, components, nodes, powers, edges, and freshness boundaries.
 author: Joseph Chege
-discussions-to: <MAGICIANS_THREAD_URL>
+discussions-to: https://ethereum-magicians.org/t/protocol-control-disclosure-core/28343
 status: Draft
 type: Standards Track
 category: ERC
