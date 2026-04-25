@@ -28,6 +28,5 @@ __pycache__/
 .env
 .env.*
 
-test/unit/ProtocolSafetyModule.t.sol9
 
 test/legacy-disabled/

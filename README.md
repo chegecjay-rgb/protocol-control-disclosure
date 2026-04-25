@@ -65,3 +65,14 @@ Those belong in optional extensions or external interpretation layers.
 ```bash
 forge build
 forge test -vvv
+```
+
+## Important caveat
+
+This repository standardizes disclosure, not truth.
+
+A protocol can self-disclose incomplete or misleading information while still exposing a syntactically valid interface. Independent verification remains necessary.
+
+## Author
+
+Joseph Chege
