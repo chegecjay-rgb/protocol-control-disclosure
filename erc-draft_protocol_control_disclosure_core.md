@@ -49,6 +49,9 @@ What is missing is not another rating system. What is missing is a thin canonica
 
 ## Specification
 
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in RFC 2119 and RFC 8174.
+
+
 ### Core compliance
 
 A compliant implementation:
@@ -193,6 +196,10 @@ This ERC standardizes disclosure, not truth.
 A malicious implementation can still omit dependencies, under-report powers, misstate scope, or publish misleading helper layers.
 
 Independent verification remains necessary.
+
+## Test Cases
+
+Foundry test coverage for the reference implementation is maintained in the public repository. The active public suite currently covers the registry and integration surfaces of the narrowed core.
 
 ## Reference Implementation
 
