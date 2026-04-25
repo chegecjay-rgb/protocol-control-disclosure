@@ -1,0 +1,31 @@
+# Foundry build artifacts
+cache/
+out/
+broadcast/
+
+# Local artifacts / scratch output
+artifacts/
+patch-backups/
+current-patch.diff
+
+# Editor / OS noise
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local test triage / quarantine
+test/quarantine/
+*.disabled
+*.bak
+
+# Python / misc local caches
+__pycache__/
+.pytest_cache/
+
+# Env files
+.env
+.env.*
+
+test/unit/ProtocolSafetyModule.t.sol9
