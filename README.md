@@ -1,4 +1,4 @@
-# Protocol Control Disclosure Core
+# Protocol Control Disclosure
 
 **ERC proposal** for a canonical, machine-readable standard for raw protocol control disclosure.
 
