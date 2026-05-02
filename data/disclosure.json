@@ -1,0 +1,16 @@
+{
+  "protocol": "ExampleProtocol",
+  "version": "1.0",
+  "controls": [
+    {
+      "id": "PAUSE",
+      "description": "Allows pausing of the protocol",
+      "actor": "owner"
+    },
+    {
+      "id": "UPGRADE",
+      "description": "Allows upgrading contract logic",
+      "actor": "owner"
+    }
+  ]
+}

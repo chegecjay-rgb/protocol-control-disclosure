@@ -1,78 +1,79 @@
-# Protocol Control Disclosure
+# ERC-8241: Protocol Control Disclosure Standard
 
-**ERC proposal** for a canonical, machine-readable standard for raw protocol control disclosure.
+## Overview
 
-> Real protocol control is not flat. This standard makes it legible.
+ERC-8241 defines a canonical, minimal standard for disclosing protocol control operations.
 
-## What this repository is
+It enables deterministic verification of whether a protocol behaves as declared.
 
-This repository contains:
-- the canonical ERC draft
-- supporting standards notes
-- a Solidity reference implementation
-- active Foundry test suites
+---
 
-The ERC core standardizes raw protocol control disclosure, while summaries, claims, profiles, diagnostics, and audit evidence are optional extension surfaces or verifier-side interpretations.
+## Core Principle
 
-## Canonical draft
+ERC-8241 answers:
 
-The canonical specification in this repository is:
+> "What operations can this protocol perform?"
 
-- [`erc-draft_protocol_control_disclosure_core.md`](./erc-draft_protocol_control_disclosure_core.md)
+It does NOT:
+- enforce safety
+- guarantee correctness
+- interpret intent
 
-## Public discussion
+---
 
-Ethereum Magicians thread:
+## Architecture
 
-- https://ethereum-magicians.org/t/protocol-control-disclosure-core/28343
+- Core Standard → defines disclosure structure
+- Discovery Extension → defines where disclosure is located
 
-## What the mandatory core contains
+---
 
-- protocol metadata
-- disclosure scope commitments
-- components
-- graph nodes
-- privileged powers
-- control edges
-- canonical identifiers
-- lookup semantics
-- ordering semantics
-- zero/default semantics
-- freshness boundaries
-- ERC-165 discovery
+## Discovery Extension (Optional)
 
-## What is intentionally not in the mandatory core
+Contracts MAY implement:
 
-- safety scores
-- trust scores
-- criticality labels
-- canonical policy conclusions
-- mandatory audit truth claims
-- verifier-side risk judgments
+- IERC8241Disclosure
+- disclosureURI()
 
-Those belong in optional extensions or external interpretation layers.
+This allows external systems to locate disclosure data.
 
-## Repository layout
+---
 
-- `erc-draft_protocol_control_disclosure_core.md` — canonical ERC draft
-- `docs/` — supporting architecture, semantics, compliance, and versioning notes
-- `src/` — Solidity reference implementation
-- `schema/` — schemas and related artifacts
-- `test/` — active test suites
+## Minimal Integration
 
-## Build and test
+1. Publish disclosure data
+2. Optionally expose URI via IERC8241Disclosure
+3. Use external verifier to compare behavior vs disclosure
 
-```bash
-forge build
-forge test -vvv
-```
+---
 
-## Important caveat
+## Example
 
-This repository standardizes disclosure, not truth.
+See:
 
-A protocol can self-disclose incomplete or misleading information while still exposing a syntactically valid interface. Independent verification remains necessary.
+protocol-control-disclosure/examples/ExampleDisclosureProtocol.sol
 
-## Author
+---
 
-Joseph Chege
+## Status
+
+- Core: Stable
+- Discovery Extension: Optional
+- Verifier: External
+
+---
+
+## Design Constraints
+
+- Minimal
+- Deterministic
+- Local-first
+- Composable
+
+---
+
+## Summary
+
+ERC-8241 does not create trust.
+
+It enables verification.
