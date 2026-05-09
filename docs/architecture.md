@@ -1,18 +1,39 @@
-# ERC-8241 Repository Architecture
+# ERC-8241 Architecture
 
-## Canonical Surface
+## Purpose
 
-The canonical ERC-8241 implementation surface consists of:
+ERC-8241 defines a standardized structural disclosure layer for Ethereum protocols.
 
-- core/
-- extensions/
+The standard enables machine-readable disclosure without prescribing:
+- governance legitimacy
+- operational correctness
+- economic safety
+- execution validity
+- verifier policy
+
+## Layer Separation
+
+| Layer | Responsibility |
+| --- | --- |
+| ERC-8241 | Structural declaration |
+| Proof of Operation (PoO) | Execution disclosure |
+| Ethereum Transparency Layer (ETL) | Verification and interpretation |
+
+## Canonical Components
+
+The normative ERC-8241 surface consists of:
+
 - ERC-8241.md
 - COMPLIANCE.md
+- core/
+- extensions/
 
-## Research Isolation
+## Repository Philosophy
 
-Historical ProtocolSafety and experimental ETL research are archived under:
+The repository intentionally separates:
+- standards
+- extensions
+- research
+- verification systems
 
-- research/legacy/
-
-These archived materials are non-normative.
+This prevents architectural ambiguity and preserves long-term standards stability.

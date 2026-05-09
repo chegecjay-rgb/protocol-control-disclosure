@@ -3,26 +3,34 @@
 ## Core Compliance Definition
 
 A contract is ERC-8241 compliant if it:
-1. Implements the core interface
+
+1. Implements the core disclosure interface
 2. Supports ERC-165 discoverability
 3. Exposes required retrieval semantics
 
-## Compliance Surface
+## Canonical Compliance Sources
 
-Normative compliance sources:
+Normative compliance sources are limited to:
+
 - ERC-8241.md
-- core/IERC8241Disclosure.sol
 - COMPLIANCE.md
+- core/IERC8241Disclosure.sol
 
 ## Extensions
 
-Extensions do NOT affect compliance status.
+Extensions are OPTIONAL.
+
+Extensions do NOT affect:
+- compliance status
+- canonical semantics
+- disclosure validity
 
 ## Explicit Non-Scope
 
-ERC-8241 does not standardize:
-- operational correctness
+ERC-8241 does NOT standardize:
+- execution validation
 - governance legitimacy
+- operational correctness
 - economic safety
+- verifier policy
 - execution intent
-- verification policy

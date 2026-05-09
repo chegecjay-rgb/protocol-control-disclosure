@@ -1,6 +1,8 @@
 # ERC-8241 Extensions
 
-Extensions provide OPTIONAL ecosystem functionality layered on top of ERC-8241 structural disclosure.
+Extensions provide OPTIONAL functionality layered on top of ERC-8241 structural disclosure.
+
+Extensions do NOT affect compliance status.
 
 ## Extension Registry
 
@@ -11,23 +13,22 @@ Extensions provide OPTIONAL ecosystem functionality layered on top of ERC-8241 s
 | Audit Evidence | Optional | Evidence attachment |
 | Profiles | Optional | Additional metadata profiles |
 
-## Extension Structure
+## Extension Boundary
 
-All extensions are grouped under:
+Extensions may:
+- expose metadata
+- improve interoperability
+- support indexing systems
+- improve discoverability
 
-- extensions/
+Extensions may NOT redefine:
+- ERC-8241 compliance
+- core disclosure semantics
+- ETL verification policy
 
-Subdirectories:
-- discovery/
-- safety/
-- profiles/
-- audit-evidence/
+## Canonical Extension Layout
 
-## Compliance Boundary
-
-Extensions do NOT affect ERC-8241 compliance status.
-
-Canonical compliance sources remain:
-- ERC-8241.md
-- COMPLIANCE.md
-- core/
+- extensions/discovery/
+- extensions/safety/
+- extensions/profiles/
+- extensions/audit-evidence/

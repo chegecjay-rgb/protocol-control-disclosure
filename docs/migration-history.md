@@ -1,12 +1,29 @@
 # Migration History
 
-The repository originally explored:
-- safety framing
-- governance interpretation
-- operational semantics
-- verification concepts
+## Repository Evolution
 
-The repository was reorganized to separate:
-- declaration
-- execution
-- verification
+The repository originally evolved through multiple experimental phases:
+- ProtocolSafety research
+- ETL exploration
+- disclosure semantics experiments
+- execution verification studies
+
+As ERC-8241 matured, the repository was normalized into:
+- canonical specification surfaces
+- optional extension systems
+- isolated historical archives
+
+## Historical Preservation
+
+Legacy materials remain preserved under:
+
+- research/legacy/
+- research/drafts/
+
+These archives exist for:
+- research continuity
+- historical reference
+- architectural archaeology
+- ecosystem transparency
+
+They are NOT normative specification sources.
