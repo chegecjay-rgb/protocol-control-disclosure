@@ -6,7 +6,14 @@ ERC-8241 defines a standardized structural disclosure interface for Ethereum pro
 
 The standard provides machine-readable protocol disclosure without prescribing governance legitimacy, operational safety, or verification policy.
 
-## Canonical Architecture
+## Design Philosophy
+
+ERC-8241 intentionally separates:
+- declaration
+- execution
+- verification
+
+## Layer Model
 
 | Layer | Responsibility |
 | --- | --- |
@@ -24,7 +31,7 @@ Normative repository components:
 - extensions/
 - docs/
 
-## Repository Structure
+## Repository Layout
 
 - core/
 - extensions/
@@ -32,14 +39,26 @@ Normative repository components:
 - examples/
 - schema/
 - research/
+- src/
+- test/
 
 ## Extensions
+
+All extensions are organized under:
+
+- extensions/
+
+Extension categories:
+- discovery
+- safety
+- profiles
+- audit-evidence
 
 Extensions remain OPTIONAL and do not affect compliance status.
 
 ## Research Preservation
 
-Historical ProtocolSafety research and experimental material are preserved under:
+Historical ProtocolSafety and experimental ETL research are preserved under:
 
 - research/legacy/
 
