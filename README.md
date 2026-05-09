@@ -4,86 +4,43 @@
 
 ERC-8241 defines a standardized structural disclosure interface for Ethereum protocols.
 
-The standard enables contracts to expose machine-readable protocol control metadata without prescribing governance models, operational policies, or safety interpretation.
+The standard provides machine-readable protocol disclosure without prescribing governance legitimacy, operational safety, or verification policy.
 
-ERC-8241 improves:
-- protocol transparency
-- infrastructure interoperability
-- monitoring systems
-- disclosure consistency
-
-## Design Philosophy
-
-ERC-8241 intentionally separates:
-- declaration
-- execution
-- verification
-
-### Layer Model
+## Canonical Architecture
 
 | Layer | Responsibility |
 | --- | --- |
 | ERC-8241 | Structural declaration |
-| Proof of Operation (PoO) | Execution events |
-| Ethereum Transparency Layer (ETL) | Verification and interpretation |
+| Proof of Operation (PoO) | Execution disclosure |
+| Ethereum Transparency Layer (ETL) | Verification |
 
-ERC-8241 does not standardize:
-- operational correctness
-- governance legitimacy
-- economic safety
-- execution intent
-- verifier policy
+## Canonical Specification Surface
 
-## Core Specification (MANDATORY)
+Normative repository components:
 
-Canonical specification:
-- ERC-8241.md
-- core/IERC8241Disclosure.sol
-
-Compliance requirements:
-- COMPLIANCE.md
-
-## Extensions (OPTIONAL)
-
-Extensions do NOT affect ERC-8241 compliance.
-
-| Extension | Purpose |
-| --- | --- |
-| Discovery | Protocol discoverability |
-| Safety Interfaces | Metadata overlays |
-| Audit Evidence | Evidence attachment |
-| Profiles | Additional metadata profiles |
-
-## Relationship to ETL
-
-| System | Responsibility |
-| --- | --- |
-| ERC-8241 | Structural declaration |
-| PoO | Observed execution |
-| ETL | Verification |
-
-## Implementation Guide
-
-1. Implement the core interface
-2. Support ERC-165 discovery
-3. Expose retrieval semantics
-4. Optionally implement extensions
-
-## Repository Layout
-
-- README.md
 - ERC-8241.md
 - COMPLIANCE.md
 - core/
 - extensions/
-- examples/
 - docs/
+
+## Repository Structure
+
+- core/
+- extensions/
+- docs/
+- examples/
 - schema/
 - research/
 
-## Contributing
+## Extensions
 
-Normative behavior belongs only in:
-- ERC-8241.md
-- core interfaces
-- COMPLIANCE.md
+Extensions remain OPTIONAL and do not affect compliance status.
+
+## Research Preservation
+
+Historical ProtocolSafety research and experimental material are preserved under:
+
+- research/legacy/
+
+These materials are archived for historical and architectural reference only.

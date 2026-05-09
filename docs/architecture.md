@@ -1,11 +1,18 @@
-# ERC-8241 Architecture
+# ERC-8241 Repository Architecture
 
-ERC-8241 is designed as a structural disclosure standard.
+## Canonical Surface
 
-## Layer Separation
+The canonical ERC-8241 implementation surface consists of:
 
-| Layer | Responsibility |
-| --- | --- |
-| ERC-8241 | Structural declaration |
-| PoO | Execution event disclosure |
-| ETL | Verification and interpretation |
+- core/
+- extensions/
+- ERC-8241.md
+- COMPLIANCE.md
+
+## Research Isolation
+
+Historical ProtocolSafety and experimental ETL research are archived under:
+
+- research/legacy/
+
+These archived materials are non-normative.
