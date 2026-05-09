@@ -1,79 +1,89 @@
-# ERC-8241: Protocol Control Disclosure Standard
+# ERC-8241 - Protocol Control Disclosure
 
 ## Overview
 
-ERC-8241 defines a canonical, minimal standard for disclosing protocol control operations.
+ERC-8241 defines a standardized structural disclosure interface for Ethereum protocols.
 
-It enables deterministic verification of whether a protocol behaves as declared.
+The standard enables contracts to expose machine-readable protocol control metadata without prescribing governance models, operational policies, or safety interpretation.
 
----
+ERC-8241 improves:
+- protocol transparency
+- infrastructure interoperability
+- monitoring systems
+- disclosure consistency
 
-## Core Principle
+## Design Philosophy
 
-ERC-8241 answers:
+ERC-8241 intentionally separates:
+- declaration
+- execution
+- verification
 
-> "What operations can this protocol perform?"
+### Layer Model
 
-It does NOT:
-- enforce safety
-- guarantee correctness
-- interpret intent
+| Layer | Responsibility |
+| --- | --- |
+| ERC-8241 | Structural declaration |
+| Proof of Operation (PoO) | Execution events |
+| Ethereum Transparency Layer (ETL) | Verification and interpretation |
 
----
+ERC-8241 does not standardize:
+- operational correctness
+- governance legitimacy
+- economic safety
+- execution intent
+- verifier policy
 
-## Architecture
+## Core Specification (MANDATORY)
 
-- Core Standard → defines disclosure structure
-- Discovery Extension → defines where disclosure is located
+Canonical specification:
+- ERC-8241.md
+- core/IERC8241Disclosure.sol
 
----
+Compliance requirements:
+- COMPLIANCE.md
 
-## Discovery Extension (Optional)
+## Extensions (OPTIONAL)
 
-Contracts MAY implement:
+Extensions do NOT affect ERC-8241 compliance.
 
-- IERC8241Disclosure
-- disclosureURI()
+| Extension | Purpose |
+| --- | --- |
+| Discovery | Protocol discoverability |
+| Safety Interfaces | Metadata overlays |
+| Audit Evidence | Evidence attachment |
+| Profiles | Additional metadata profiles |
 
-This allows external systems to locate disclosure data.
+## Relationship to ETL
 
----
+| System | Responsibility |
+| --- | --- |
+| ERC-8241 | Structural declaration |
+| PoO | Observed execution |
+| ETL | Verification |
 
-## Minimal Integration
+## Implementation Guide
 
-1. Publish disclosure data
-2. Optionally expose URI via IERC8241Disclosure
-3. Use external verifier to compare behavior vs disclosure
+1. Implement the core interface
+2. Support ERC-165 discovery
+3. Expose retrieval semantics
+4. Optionally implement extensions
 
----
+## Repository Layout
 
-## Example
+- README.md
+- ERC-8241.md
+- COMPLIANCE.md
+- core/
+- extensions/
+- examples/
+- docs/
+- schema/
+- research/
 
-See:
+## Contributing
 
-protocol-control-disclosure/examples/ExampleDisclosureProtocol.sol
-
----
-
-## Status
-
-- Core: Stable
-- Discovery Extension: Optional
-- Verifier: External
-
----
-
-## Design Constraints
-
-- Minimal
-- Deterministic
-- Local-first
-- Composable
-
----
-
-## Summary
-
-ERC-8241 does not create trust.
-
-It enables verification.
+Normative behavior belongs only in:
+- ERC-8241.md
+- core interfaces
+- COMPLIANCE.md
