@@ -1,0 +1,23 @@
+flowchart LR
+
+    A["ERC-8241 Declarations"]
+
+    B["PoO Execution Records"]
+
+    C["Canonical Operation Identity"]
+
+    D["ETL Runtime"]
+
+    E["Replay Reconstruction"]
+
+    F["Equivalence Validation"]
+
+    G["Machine-Checkable Verification"]
+
+    A --> D
+    B --> D
+    C --> D
+
+    D --> E
+    E --> F
+    F --> G

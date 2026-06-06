@@ -1,0 +1,19 @@
+flowchart LR
+
+    A["protocol-control-disclosure"]
+
+    B["proof-of-operation"]
+
+    C["proof-of-operation-retrofits"]
+
+    D["etl-runtime"]
+
+    A -->|"Declared Authority Surface"| B
+
+    B -->|"Execution Evidence"| C
+
+    C -->|"Canonical Operation Identity"| D
+
+    A -.->|"Reviewer Reads First"| B
+    B -.->|"Then"| C
+    C -.->|"Then"| D
